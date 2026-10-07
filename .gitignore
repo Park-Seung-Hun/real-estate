@@ -1,0 +1,22 @@
+# 비공개 자료(인계 문서, 작업 계획, 진행 원장, 조사 원자료, 실제 데이터)
+.private/
+
+# 작업용 워크트리
+.worktrees/
+
+# 환경 변수와 인증키
+.env
+.env.*
+!.env.example
+
+# 빌드 산출물
+build/
+out/
+.gradle/
+node_modules/
+
+# 편집기와 운영체제
+.idea/
+.vscode/
+*.iml
+.DS_Store
