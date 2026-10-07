@@ -29,8 +29,32 @@
 - 작성 계획은 `.private/plans/설계문서_계획.md`에 있다. 문서 하나를 마치면 사용자 확인을 받고 다음 문서로 넘어간다.
 - 다이어그램은 Mermaid로 그린다. C4는 시스템 컨텍스트, 컨테이너, 컴포넌트 세 단계로 나누고, 1단계 구성과 최종 목표 구성을 따로 그린다.
 
+## 구현
+
+- 기능 구현은 SpecKit(`/speckit-specify`, `/speckit-plan`, `/speckit-tasks`, `/speckit-implement`)으로만 한다.
+- SpecKit 없이 하는 작업은 출시한 버전의 버그 수정(`hotfix/*`), 설정과 도구(`chore/*`), 문서(`docs/*`)뿐이다.
+- SpecKit 없이 한 수정이 기능 동작을 바꾸면, 그 기능의 `specs/NNN-이름/spec.md`에서 해당 요구사항을 같은 브랜치에서 직접 고친다. 자세한 절차는 이런 수정이 처음 생길 때 정한다.
+
 ## 브랜치
 
-- 첫 커밋(초기 설정)만 `main`에 직접 커밋했다. 이후 작업은 `main`에서 직접 하지 않고 작업마다 브랜치를 만든다.
-- 브랜치 이름은 `종류/짧은-이름`으로 짓는다. 종류는 `feat`, `fix`, `docs`, `chore`, `refactor` 중 하나다(예: `docs/design-docs`).
+버전별 개발 브랜치를 두는 gitflow를 쓰되, release 브랜치는 두지 않는다.
+
+| 브랜치 | 만드는 곳 | `--no-ff` 머지 대상 | 담는 것 |
+|---|---|---|---|
+| `main` | | | 출시한 상태만 둔다. 머지 커밋에 `vN.0.0` 태그를 단다 |
+| `develop/vN` | 이전 버전 태그가 달린 `main` | `main` | 단계 N(1~4)의 개발. 단계 전체를 마치면 한 번 머지한다 |
+| `NNN-기능이름` | `develop/vN` | `develop/vN` | SpecKit 기능 하나. 이름은 `specs/` 아래 폴더 이름과 같다 |
+| `docs/*`, `chore/*` | `develop/vN` | `develop/vN` | 문서, 설정과 도구 |
+| `hotfix/vN.0.x` | `main` | `main`, 진행 중인 `develop/vN` | 출시한 버전의 버그 수정. `main`에 머지하고 태그를 단다 |
+
+- `main`에는 직접 커밋하지 않는다. 첫 커밋(초기 설정)만 예외였다.
+- 이름 없는 `develop` 브랜치는 두지 않는다. git은 `develop`과 `develop/v1`을 함께 만들 수 없다.
+- `develop/vN`은 한 번에 하나만 연다. 다음 단계의 브랜치는 이전 단계를 `main`에 머지하고 태그를 단 뒤 만든다.
+- 출시 전 마무리(버전 번호, 변경 기록)는 `develop/vN`의 마지막 커밋으로 한다.
+- 머지는 모두 `--no-ff`로 하고, 머지한 브랜치는 지운다.
 - 여러 문서나 파일에 걸친 작업은 브랜치를 워크트리로 체크아웃해 `.worktrees/<브랜치 이름>`에서 한다. `.private/`는 git이 추적하지 않아 워크트리에는 없으므로 원래 체크아웃의 `.private/`에서 읽는다.
+- SpecKit은 브랜치를 만들지 않는다(git extension을 설치하지 않았다). 기능 브랜치는 워크트리와 함께 직접 만들고, 그 워크트리 안에서 `/speckit-specify`를 실행한다. 번호는 `develop/vN`의 `specs/`에 있는 마지막 번호 다음을 쓴다.
+
+```
+git worktree add .worktrees/001-visit-log -b 001-visit-log develop/v1
+```
