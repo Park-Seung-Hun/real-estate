@@ -28,6 +28,7 @@ flowchart TB
     subscription["청약홈 API<br/>2단계부터 사용"]
     building["건축물대장 API<br/>2단계부터 사용"]
     kapt["공동주택 정보 API<br/>K-apt 기본 정보와 관리비<br/>2단계부터 사용"]
+    price["공동주택 공시가격 API<br/>2단계부터 사용"]
   end
 
   owner -->|"임장 기록, 매물 호가, 방문 일정을 입력하고<br/>실거래 추이를 조회"| service
@@ -37,6 +38,7 @@ flowchart TB
   service -->|"공급지역과 모집공고일 조건으로<br/>청약 공고 조회"| subscription
   service -->|"시군구 코드와 법정동 코드로<br/>표제부와 총괄표제부 조회"| building
   service -->|"단지코드로 기본 정보와<br/>월별 관리비 조회"| kapt
+  service -->|"공동주택 공시가격 조회"| price
   service -->|"거래, 방문 일정, 청약 알림 메일을<br/>보내도록 요청"| mail
   service -.->|"각자의 토큰으로<br/>나에게 보내기 호출"| kakao
   mail -->|"알림 메일 전달"| users
@@ -48,7 +50,7 @@ flowchart TB
   classDef hold fill:#999999,stroke:#6b6b6b,color:#fff,stroke-dasharray:5 5
   class owner,family person
   class service system
-  class trade,map,subscription,building,kapt,mail ext
+  class trade,map,subscription,building,kapt,price,mail ext
   class kakao hold
 ```
 
@@ -67,6 +69,7 @@ flowchart TB
 | 건축물대장 API([공공데이터포털 15134735](https://www.data.go.kr/data/15134735/openapi.do)) | 시군구 코드와 법정동 코드(필수), 번과 지(선택). 표제부와 총괄표제부를 따로 조회 | 개발계정 하루 10,000건. 운영계정은 활용사례를 등록하면 늘릴 수 있음 | 단지 기본 정보(세대수, 층수, 주차 대수, 준공 연도) | 2 |
 | 공동주택 정보 API(K-apt 기본 정보, [공공데이터포털 15058453](https://www.data.go.kr/data/15058453/openapi.do)) | K-apt(공동주택관리정보시스템) 단지코드 | 개발계정 하루 5,000건. 운영계정은 활용사례를 등록하면 늘릴 수 있음 | 단지 기본 정보(난방 방식) | 2 |
 | 공동주택 정보 API(K-apt 관리비, [공공데이터포털 15059469](https://www.data.go.kr/data/15059469/openapi.do)) | K-apt 단지코드와 발생년월. 난방비, 수도료 같은 항목마다 따로 조회 | 개발계정 하루 5,000건. 운영계정은 활용사례를 등록하면 늘릴 수 있음 | 단지 기본 정보(관리비) | 2 |
+| 공동주택 공시가격 API([공공데이터포털 15124003](https://www.data.go.kr/data/15124003/openapi.do)) | 공간정보(WMS/WFS/속성정보) 형식. 페이지에 호출 단위가 없음 | 페이지에 한도 숫자가 없음(기관 정책에 따라 다름). 개발 단계는 자동승인, 운영 단계는 심의승인 | 자금 계산의 공시가격 참고값 | 2 |
 | 카카오톡 메시지 API(보류. PRD 열린 질문) | 사용자 각자의 토큰으로 "나에게 보내기" 호출. 검수가 필요 없음 | 확인하지 않음 | 없음(메일이 기본 채널). 토큰이 만료되거나 동의를 철회하면 메일로 대신 보냄(PRD 열린 질문) | 보류 |
 
 - 실거래 신고 기한은 계약 후 30일이고, 해제 신고는 더 늦게 접수될 수 있습니다. 그래서 최근 몇 달치를 매일 다시 받습니다. 다시 받는 기간은 결정 기록 0009(작성 예정)에서 정합니다.
@@ -83,6 +86,7 @@ PRD에 나오는 외부 데이터와 서비스를 다이어그램의 외부 시�
 | 공동주택 기본 정보(K-apt) | 외부 데이터 출처 | 공동주택 정보 API |
 | 공동주택 관리비(K-apt) | 외부 데이터 출처 | 공동주택 정보 API |
 | 건축물대장 | 외부 데이터 출처 | 건축물대장 API |
+| 공동주택 공시가격 | 외부 데이터 출처 | 공동주택 공시가격 API |
 | 브이월드(기본) | 지도 API | 지도 API(브이월드) |
 | 카카오맵(대안) | 지도 API | 대안이라 다이어그램에 넣지 않음. 조건은 PRD 지도 API 표에 있음 |
 | 네이버 지도(제외) | 지도 API | 제외한 API라 다이어그램에 넣지 않음 |
