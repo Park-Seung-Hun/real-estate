@@ -11,10 +11,10 @@
 | 데이터 모델. 1단계 테이블과 키, 이력 저장 방식 | `docs/architecture/data-model.md` | 작성 예정 |
 | C4 컴포넌트. API 서버, collector, 알림 발송기의 1단계 모듈 경계 | `docs/architecture/c4-component.md` | 작성 예정 |
 | 핵심 흐름. 수집과 변경 감지, 알림 발송, 임장 기록과 사진 업로드, 단지 연결의 순서도 | `docs/architecture/flows.md` | 작성 예정 |
-| 결정 기록 목록. 결정 기록의 형식과 목록 | `docs/adr/README.md` | 작성 예정 |
-| 결정 기록 0001. 기관이 공개하는 공식 API만 사용하는 결정 | `docs/adr/0001-official-api-only.md` | 작성 예정 |
-| 결정 기록 0002. 기록은 서비스 자체 화면에서 입력하는 결정 | `docs/adr/0002-own-input-screen.md` | 작성 예정 |
-| 결정 기록 0003. 알림 채널 | `docs/adr/0003-notification-channel.md` | 작성 예정 |
+| 결정 기록 목록. 결정 기록의 형식과 목록 | [`docs/adr/README.md`](adr/README.md) | 작성 완료 |
+| 결정 기록 0001. 기관이 공개하는 공식 API만 사용하는 결정 | [`docs/adr/0001-official-api-only.md`](adr/0001-official-api-only.md) | 작성 완료 |
+| 결정 기록 0002. 기록은 서비스 자체 화면에서 입력하는 결정 | [`docs/adr/0002-own-input-screen.md`](adr/0002-own-input-screen.md) | 작성 완료 |
+| 결정 기록 0003. 알림 채널 | [`docs/adr/0003-notification-channel.md`](adr/0003-notification-channel.md) | 작성 완료 |
 | 결정 기록 0004. 단계별 기술 도입과 도입 조건 | `docs/adr/0004-staged-adoption.md` | 작성 예정 |
 | 결정 기록 0005. 하나의 애플리케이션으로 두는 부분과 따로 실행하는 부분 | `docs/adr/0005-modular-monolith.md` | 작성 예정 |
 | 결정 기록 0006. 같은 실거래를 구분하는 키 | `docs/adr/0006-transaction-identity.md` | 작성 예정 |
