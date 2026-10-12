@@ -100,4 +100,4 @@ PRD에 나오는 외부 데이터와 서비스를 다이어그램의 외부 시�
 
 ## 다음 문서
 
-C4 컨테이너(`docs/architecture/c4-container.md`, 작성 예정)에서 이 시스템을 1단계 실행 단위와 최종 목표 구성으로 나눕니다.
+C4 컨테이너([`docs/architecture/c4-container.md`](c4-container.md))에서 이 시스템을 1단계 실행 단위와 최종 목표 구성으로 나눕니다.
