@@ -6,7 +6,7 @@
 |---|---|---|
 | 문서 지도. 설계 문서의 목록과 작성 상태 | [`docs/README.md`](README.md) | 작성 완료 |
 | PRD. 서비스가 누구를 위해 무엇을 어디까지 하는지 | [`docs/prd.md`](prd.md) | 작성 완료 |
-| C4 시스템 컨텍스트. 사용자와 외부 시스템 사이에서 이 서비스의 경계 | `docs/architecture/c4-context.md` | 작성 예정 |
+| C4 시스템 컨텍스트. 사용자와 외부 시스템 사이에서 이 서비스의 경계 | [`docs/architecture/c4-context.md`](architecture/c4-context.md) | 작성 완료 |
 | C4 컨테이너. 1단계 실행 단위와 최종 목표 구성 | `docs/architecture/c4-container.md` | 작성 예정 |
 | 데이터 모델. 1단계 테이블과 키, 이력 저장 방식 | `docs/architecture/data-model.md` | 작성 예정 |
 | C4 컴포넌트. API 서버, collector, 알림 발송기의 1단계 모듈 경계 | `docs/architecture/c4-component.md` | 작성 예정 |
