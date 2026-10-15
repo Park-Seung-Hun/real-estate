@@ -1,0 +1,48 @@
+window:
+  navbar:
+    leading:
+      backbutton "단지 상세"
+    center:
+      text "101동 1203호" bold
+    trailing:
+      button "매물 수정"
+  col 360:
+    text "예시마을 1단지  전용 84.97m2"
+    row justify=between:
+      text "방문 2026-10-18 14:00"
+    button "임장 기록 작성" primary
+    text "상태" muted
+    combo "상태" value="검토 중" options="검토 중, 보류, 포기, 계약"
+    text "주소 새벽동 123"
+    image label="지도 영역" width=320 height=120
+    text "출처: 브이월드" muted size=small
+    divider
+    section "호가와 최근 실거래":
+      kv "현재 호가" "95,000 (2026-10-10)"
+      text "같은 단지, 같은 면적의 최근 실거래" muted
+      kv "계약일  층  금액" "호가와 차이"
+      kv "2026-09-12  12층  92,000" "3,000"
+      kv "2026-08-03  7층  90,500" "4,500"
+      text "차이는 호가에서 실거래가를 뺀 값" muted size=small
+    divider
+    section "호가 이력":
+      button "호가 추가"
+      kv "2026-10-10  95,000" "네이버 부동산"
+      kv "2026-09-28  97,000" "중개사무소(방문이나 전화)"
+    divider
+    section "임장 기록":
+      text "하나(나)  2026-10-18  점수 4" bold
+      checkbox "엘리베이터 (예시 항목)" checked label-right
+      checkbox "주차 (예시 항목)" label-right
+      row:
+        image label="사진" width=96 height=72
+        image label="사진" width=96 height=72
+        image label="사진" width=96 height=72
+      text "메모: 남향이고 소음이 적음"
+      divider
+      text "두리  2026-10-18  점수 3" bold
+      checkbox "엘리베이터 (예시 항목)" checked label-right
+      checkbox "주차 (예시 항목)" checked label-right
+      row:
+        image label="사진" width=96 height=72
+      text "메모: 주차장 진입로가 좁음"

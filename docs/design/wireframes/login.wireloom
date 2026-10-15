@@ -1,0 +1,7 @@
+window:
+  header:
+    text "아파트 임장 기록" bold
+  col 360:
+    text "로그인 영역" muted
+    text "로그인 방식은 정하지 않았습니다(PRD 열린 질문)" muted size=small
+    button "로그인" primary

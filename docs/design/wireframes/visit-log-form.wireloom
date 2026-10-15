@@ -1,0 +1,27 @@
+window:
+  navbar:
+    leading:
+      backbutton "매물 상세"
+    center:
+      text "임장 기록 작성" bold
+  col 360:
+    text "101동 1203호" bold
+    text "작성자: 하나(나)" muted
+    divider
+    section "체크리스트":
+      text "항목은 데이터 모델에서 정합니다. 그림의 항목은 예시입니다." muted size=small
+      checkbox "엘리베이터 상태 (예시)" label-right
+      checkbox "주차 공간 (예시)" checked label-right
+      checkbox "일조 (예시)" label-right
+    section "사진":
+      row:
+        image label="사진" width=96 height=72
+        image label="사진" width=96 height=72
+        button "사진 추가"
+    section "메모":
+      input placeholder="메모"
+      input placeholder="메모"
+    row:
+      input placeholder="점수"
+    text "점수 범위는 데이터 모델에서 정합니다." muted size=small
+    button "기록 저장" primary

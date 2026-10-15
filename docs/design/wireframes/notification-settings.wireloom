@@ -1,0 +1,15 @@
+window:
+  navbar:
+    leading:
+      backbutton "관심 단지"
+    center:
+      text "알림 설정" bold
+  col 360:
+    text "알림 받을 메일" muted
+    input placeholder="알림 받을 메일"
+    divider
+    checkbox "거래 알림" checked label-right
+    text "관심 단지에 새 거래나 해제가 신고되면 메일을 보냅니다" muted
+    checkbox "방문 하루 전 알림" checked label-right
+    text "방문 일시 하루 전에 메일을 보냅니다" muted
+    button "저장" primary
