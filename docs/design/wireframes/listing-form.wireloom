@@ -1,0 +1,46 @@
+window:
+  navbar:
+    leading:
+      backbutton "단지 상세"
+    center:
+      text "매물 등록" bold
+  col 360:
+    text "예시마을 1단지" bold
+    divider
+    row:
+      col 160:
+        input placeholder="동"
+      col 160:
+        input placeholder="호"
+    text "전용면적" muted
+    radio "59.98m2" group="area" label-right
+    radio "84.97m2" group="area" selected label-right
+    radio "목록에 없음(직접 입력)" group="area" label-right
+    input placeholder="전용면적(m2)"
+    divider
+    row:
+      input placeholder="호가"
+      text "만원"
+    text "호가 출처" muted
+    radio "네이버 부동산" group="source" label-right
+    radio "호갱노노" group="source" label-right
+    radio "KB부동산" group="source" label-right
+    radio "직방" group="source" label-right
+    radio "중개사무소(방문이나 전화)" group="source" label-right
+    radio "기타" group="source" label-right
+    text "호가 확인 날짜" muted
+    input placeholder="2026-10-15 (오늘, 고칠 수 있음)"
+    divider
+    section "위치":
+      input placeholder="새벽동 123 (단지 주소, 고칠 수 있음)"
+      image label="지도 영역" width=320 height=120
+      text "주소의 위치를 표시합니다" muted
+      text "출처: 브이월드" muted size=small
+    divider
+    row:
+      col 160:
+        input placeholder="방문 일시(날짜)"
+      col 160:
+        input placeholder="방문 일시(시각)"
+    text "아직 예약하지 않았으면 비워 둡니다" muted
+    button "매물 등록" primary

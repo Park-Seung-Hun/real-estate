@@ -1,0 +1,27 @@
+window:
+  header large:
+    text "관심 단지"
+  col 360:
+    list:
+      slot "예시마을 1단지" chevron:
+        text "매물 2건" muted
+        text "최근 거래 2026-09-12" muted
+        text "84.97m2  92,000" muted
+      slot "예시마을 2단지" chevron:
+        text "매물 0건" muted
+        text "최근 거래 2026-08-21" muted
+        text "59.98m2  68,500" muted
+    button "단지 추가"
+    row:
+      button "알림 설정"
+      button "가족 초대"
+  sheet title="단지 추가":
+    input placeholder="이름"
+    list:
+      slot "예시숲 아파트" chevron:
+        text "새벽동" muted
+      slot "예시골 3단지" chevron:
+        text "새벽동" muted
+      slot "예시뜰 아파트" chevron:
+        text "아침동" muted
+    button "닫기"

@@ -1,0 +1,12 @@
+{
+  "name": "wireframes",
+  "private": true,
+  "description": "docs/design/wireframes.md의 화면 그림을 .wireloom 원문에서 SVG로 생성합니다. npm install 뒤 npm run render.",
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "devDependencies": {
+    "wireloom": "0.7.0"
+  }
+}

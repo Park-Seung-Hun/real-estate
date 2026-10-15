@@ -1,0 +1,27 @@
+window:
+  navbar:
+    leading:
+      backbutton "관심 단지"
+    center:
+      text "예시마을 1단지" bold
+    trailing:
+      button "임장 후보로 추가"
+  col 360:
+    section "실거래 추이":
+      text "면적" muted
+      segmented:
+        segment "59.98m2" selected
+        segment "84.97m2"
+      chart
+      text "가로축 계약월, 세로축 거래 금액" muted
+    section "최근 실거래":
+      kv "계약일  층  전용" "금액  해제"
+      kv "2026-09-05  12층  59.98" "68,000"
+      kv "2026-08-30  5층  59.98" "66,500 (해제)"
+      kv "2026-08-02  9층  59.98" "67,000"
+    section "등록한 매물":
+      slot "101동 1203호  84.97m2" chevron:
+        text "검토 중" muted
+      slot "103동 502호  59.98m2" chevron:
+        text "보류" muted
+      button "매물 등록" primary

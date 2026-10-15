@@ -21,7 +21,7 @@
 | 결정 기록 0007. 해제, 정정, 등기로 바뀐 거래를 남기는 방식 | `docs/adr/0007-change-history.md` | 작성 예정 |
 | 결정 기록 0008. 기관마다 다른 단지 키를 잇는 방식 | `docs/adr/0008-complex-matching.md` | 작성 예정 |
 | 결정 기록 0009. 실거래를 매일 다시 받는 기간 | `docs/adr/0009-refetch-window.md` | 작성 예정 |
-| 화면 와이어프레임. 1단계 화면과 화면 사이 이동 | `docs/design/wireframes.md` | 작성 예정 |
+| 화면 와이어프레임. 1단계 화면과 화면 사이 이동 | [`docs/design/wireframes.md`](design/wireframes.md) | 작성 완료 |
 | API 명세. 화면이 사용하는 API의 OpenAPI 명세 | `docs/api/openapi.yaml` | 작성 예정 |
 | API 안내. 화면 데이터와 API의 대조, 오류 응답과 페이지네이션 규칙 | `docs/api/README.md` | 작성 예정 |
 
