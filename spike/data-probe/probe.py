@@ -23,8 +23,18 @@ from pathlib import Path
 
 ENDPOINT = ("https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/"
             "getRTMSDataSvcAptTradeDev")
-DEFAULT_ENV = Path.home() / "Desktop" / "real-estate" / ".env"
-DEFAULT_OUT = Path.home() / "Desktop" / "real-estate" / ".private" / "data" / "snapshots"
+
+
+def repo_root():
+    """스크립트 위치에서 저장소 루트를 구한다. 워크트리 안이면 원래 체크아웃을 돌려준다."""
+    root = Path(__file__).resolve().parents[2]
+    if root.parent.name == ".worktrees":
+        return root.parents[1]
+    return root
+
+
+DEFAULT_ENV = repo_root() / ".env"
+DEFAULT_OUT = repo_root() / ".private" / "data" / "snapshots"
 NUM_OF_ROWS = 1000
 REQUEST_GAP_SEC = 0.2
 RETRY_DELAYS = (2, 4)  # 첫 시도 실패 뒤 2초, 두 번째 실패 뒤 4초. 최대 3번 시도한다.
@@ -412,9 +422,9 @@ def main():
 
     f = sub.add_parser("fetch", help="API로 받아 날짜별 스냅샷에 저장")
     f.add_argument("--env", default=DEFAULT_ENV,
-                   help="기본값 ~/Desktop/real-estate/.env")
+                   help="기본값은 저장소 루트의 .env")
     f.add_argument("--out", default=DEFAULT_OUT,
-                   help="기본값 ~/Desktop/real-estate/.private/data/snapshots")
+                   help="기본값은 저장소 루트의 .private/data/snapshots")
     f.add_argument("--months", type=int, default=6)
     f.add_argument("--date", help="YYYY-MM-DD, 기본값은 오늘")
     f.set_defaults(func=cmd_fetch)
@@ -422,7 +432,7 @@ def main():
     a = sub.add_parser("analyze", help="스냅샷 하나를 집계")
     a.add_argument("snapshot_dir", nargs="?")
     a.add_argument("--out", default=DEFAULT_OUT,
-                   help="기본값 ~/Desktop/real-estate/.private/data/snapshots")
+                   help="기본값은 저장소 루트의 .private/data/snapshots")
     a.add_argument("--months", type=int, default=12)
     a.set_defaults(func=cmd_analyze)
 

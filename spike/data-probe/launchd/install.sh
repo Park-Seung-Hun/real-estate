@@ -1,6 +1,6 @@
 #!/bin/bash
 # 사용법: install.sh [저장소 루트]
-# 저장소 루트의 기본값은 ~/Desktop/real-estate (워크트리가 아니라 원래 체크아웃).
+# 저장소 루트의 기본값은 이 스크립트 위치에서 계산한다(워크트리 안이면 그 위의 원래 체크아웃).
 set -eu
 
 LABEL="com.real-estate.data-probe"
@@ -15,8 +15,12 @@ libc._NSGetExecutablePath(buf, ctypes.byref(size))
 print(buf.value.decode())
 PY
 )"
-REPO="${1:-$HOME/Desktop/real-estate}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
+DEFAULT_REPO="$(cd "$HERE/../../.." && pwd)"
+if [ "$(basename "$(dirname "$DEFAULT_REPO")")" = ".worktrees" ]; then
+  DEFAULT_REPO="$(cd "$DEFAULT_REPO/../.." && pwd)"
+fi
+REPO="${1:-$DEFAULT_REPO}"
 TEMPLATE="$HERE/$LABEL.plist.template"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
