@@ -15,7 +15,7 @@ LAWD_CD=12345
 
 - `DATA_GO_KR_SERVICE_KEY`는 Encoding 키가 아니라 Decoding 키다. 스크립트가 URL 인코딩을 한다.
 - `LAWD_CD`는 시군구 법정동 코드 5자리다. 위 값은 가짜 예시다.
-- 스크립트는 기본으로 `~/Desktop/real-estate/.env`를 읽는다. 다른 파일은 `--env`로 준다.
+- 스크립트는 기본으로 스크립트 위치에서 계산한 저장소 루트(워크트리 안이면 그 위의 원래 체크아웃)의 `.env`를 읽는다. 다른 파일은 `--env`로 준다.
 
 ## 실행
 
@@ -25,7 +25,7 @@ LAWD_CD=12345
 | 매일 수집 | `python3 spike/data-probe/probe.py fetch --months 6` | 같은 모양 |
 | 집계 | `python3 spike/data-probe/probe.py analyze` | `<스냅샷 폴더>/summary.md` |
 
-- `--out`의 기본값은 `~/Desktop/real-estate/.private/data/snapshots`다.
+- `--out`의 기본값은 스크립트 위치에서 계산한 저장소 루트(워크트리 안이면 그 위의 원래 체크아웃)의 `.private/data/snapshots`다.
 - 대상 계약년월은 `--date`(기본값은 오늘)가 속한 달부터 거슬러 `--months`개월이다.
 - 한 달 응답이 1,000행을 넘으면 `<YYYYMM>-p1.xml`, `<YYYYMM>-p2.xml`처럼 페이지마다 파일 하나로 저장한다.
 - 같은 날 다시 실행하면 같은 폴더의 같은 달 파일을 덮어쓴다.
@@ -53,7 +53,7 @@ spike/data-probe/launchd/install.sh [저장소 루트]
 spike/data-probe/launchd/uninstall.sh
 ```
 
-- `install.sh`는 템플릿에서 `~/Library/LaunchAgents/com.real-estate.data-probe.plist`를 만들고 `launchctl bootstrap`으로 올린다. 이미 올라가 있으면 먼저 내린다. 저장소 루트의 기본값은 `~/Desktop/real-estate`(워크트리가 아니라 원래 체크아웃)다.
+- `install.sh`는 템플릿에서 `~/Library/LaunchAgents/com.real-estate.data-probe.plist`를 만들고 `launchctl bootstrap`으로 올린다. 이미 올라가 있으면 먼저 내린다. 저장소 루트의 기본값은 스크립트 위치에서 계산한다(워크트리 안이면 그 위의 원래 체크아웃).
 - `uninstall.sh`는 에이전트를 내리고 plist를 지운다.
 - 로그는 `<저장소 루트>/.private/data/logs/data-probe.out.log`와 `data-probe.err.log`에 쌓인다.
 
