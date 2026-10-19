@@ -1,0 +1,19 @@
+window:
+  navbar:
+    leading:
+      backbutton "관심 단지"
+    center:
+      text "가족 초대" bold
+  col 360:
+    section "내 표시 이름":
+      kv "지금 이름" "하나"
+      input placeholder="새 이름"
+      button "저장"
+    section "함께 보는 사람":
+      text "하나(나)  owner  참여 중"
+      text "hana@example.com" muted size=small
+    section "보낸 초대":
+      row justify=between:
+        text "10월 19일 만듦, 6일 남음"
+        button "취소"
+    text "기다리는 초대가 있어 새 초대를 만들 수 없습니다" muted size=small
