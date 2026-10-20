@@ -1,0 +1,24 @@
+window:
+  navbar:
+    leading:
+      backbutton "관심 단지"
+    center:
+      text "예시마을 3단지" bold
+    trailing:
+      button "임장 후보로 추가"
+  col 360:
+    section "실거래 추이":
+      text "면적" muted
+      segmented:
+        segment "59.98m2" selected
+        segment "84.97m2"
+      chart
+      text "가로축 계약월, 세로축 거래 금액" muted
+    section "최근 실거래":
+      kv "계약일  층  전용" "금액  해제"
+      kv "2026-09-14  8층  59.98" "71,000"
+      kv "2026-08-25  3층  59.98" "69,500 (해제)"
+      kv "2026-08-10  14층  59.98" "70,500"
+    section "등록한 매물":
+      text "등록한 매물 2건과 임장 기록 3개가 남아 있습니다." muted
+      text "임장 후보로 다시 추가하면 보입니다." muted

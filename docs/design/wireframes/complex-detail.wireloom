@@ -5,7 +5,7 @@ window:
     center:
       text "예시마을 1단지" bold
     trailing:
-      button "임장 후보로 추가"
+      button "관심 단지에서 빼기"
   col 360:
     section "실거래 추이":
       text "면적" muted

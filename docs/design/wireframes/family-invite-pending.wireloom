@@ -17,3 +17,5 @@ window:
         text "10월 19일 만듦, 6일 남음"
         button "취소"
     text "기다리는 초대가 있어 새 초대를 만들 수 없습니다" muted size=small
+    divider
+    button "가구 삭제"

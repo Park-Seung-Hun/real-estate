@@ -1,0 +1,12 @@
+window:
+  header large:
+    text "관심 단지"
+  col 360:
+    text "아직 가구가 없습니다" bold
+    text "가족과 함께 볼 기록을 모으려면 가구를 만드세요" muted
+    button "가구 만들기" primary
+    text "가족에게 받은 초대 링크가 있으면 그 링크를 여세요." muted size=small
+    divider
+    row:
+      button "로그아웃"
+      button "탈퇴"
