@@ -1,6 +1,6 @@
 # 데이터 모델
 
-이 문서는 1단계에서 데이터베이스에 두는 테이블 18개와 키, 유일 조건, 거래와 호가의 이력을 남기는 방식, 삭제 범위를 정합니다. 데이터베이스는 PostgreSQL입니다([C4 컨테이너](c4-container.md)). 열마다 그 열을 요구한 화면 항목, PRD 요구사항, 결정 기록을 출처로 적었고, 개인정보 열의 저장 방식은 [결정 기록 0012](../adr/0012-personal-data-storage.md)를 따릅니다.
+이 문서는 1단계에서 데이터베이스에 두는 테이블 19개와 키, 유일 조건, 거래와 호가의 이력을 남기는 방식, 삭제 범위를 정합니다. 데이터베이스는 PostgreSQL입니다([C4 컨테이너](c4-container.md)). 열마다 그 열을 요구한 화면 항목, PRD 요구사항, 결정 기록을 출처로 적었고, 개인정보 열의 저장 방식은 [결정 기록 0012](../adr/0012-personal-data-storage.md)를 따릅니다.
 
 ## 만드는 기준
 
@@ -21,7 +21,7 @@
 
 | 영역 | 테이블 | 주로 쓰는 모듈 |
 |---|---|---|
-| [사용자와 가구](#사용자와-가구) | `user`, `household`, `household_member`, `invitation`, `session` | API 서버 |
+| [사용자와 가구](#사용자와-가구) | `user`, `household`, `household_member`, `invitation`, `spring_session`, `spring_session_attributes` | API 서버 |
 | [단지와 거래](#단지와-거래) | `complex`, `trade`, `trade_history`, `fetch_range` | collector가 쓰고, API 서버가 읽습니다 |
 | [매물과 기록](#매물과-기록) | `interest_complex`, `listing`, `asking_price`, `checklist_item`, `visit_log`, `visit_log_check`, `visit_photo` | API 서버 |
 | [알림](#알림) | `notification_setting`, `notification_delivery` | 알림 발송기와 API 서버 |
@@ -60,18 +60,26 @@ erDiagram
     bigint accepted_by FK "수락한 사용자. 수락 전에는 비움"
     timestamptz created_at "만든 시각"
   }
-  session {
-    bigint id PK
-    bigint user_id FK "로그인한 사용자"
-    bytea token_hash UK "세션 토큰의 해시"
-    timestamptz expires_at "세션이 끝나는 시각"
+  spring_session {
+    char primary_id PK "Spring Session이 만드는 내부 키"
+    char session_id UK "쿠키 토큰의 SHA-256 해시. 소문자 16진수 64자"
+    bigint creation_time "만든 시각. 밀리초"
+    bigint last_access_time "마지막 요청 시각. 밀리초"
+    int max_inactive_interval "유휴 허용 시간. 초"
+    bigint expiry_time "만료 시각. 밀리초"
+    varchar principal_name "user.id를 문자열로 담음. user를 외래 키로 가리키지 않음"
+  }
+  spring_session_attributes {
+    char session_primary_id PK, FK "세션"
+    varchar attribute_name PK "속성 이름"
+    bytea attribute_bytes "직렬화한 로그인 정보"
   }
   user ||--o| household_member : "가구에 속한다"
   household ||--|{ household_member : "구성원을 둔다"
   household ||--o{ invitation : "초대를 보낸다"
   user ||--o{ invitation : "초대를 만든다"
   user |o--o{ invitation : "초대를 수락한다"
-  user ||--o{ session : "로그인한다"
+  spring_session ||--o{ spring_session_attributes : "속성을 둔다"
 ```
 
 | 테이블 | 무엇을 담나 | 한 행은 | 왜 있나 |
@@ -80,7 +88,8 @@ erDiagram
 | `household` | 기록을 함께 보는 사람들의 묶음 | 가구 하나 | 관심 단지, 매물, 호가 이력, 임장 기록이 가구에 속합니다(결정 기록 0011 결정 절) |
 | `household_member` | 누가 어느 가구에 어떤 역할로 속하는지 | 사용자 한 명의 멤버십 | 요청마다 사용자의 가구 역할로 권한 키를 확인합니다(결정 기록 0011 결정 절) |
 | `invitation` | 가족 초대 링크 | 초대 링크 하나 | owner가 일회용 초대 링크로 구성원을 받습니다(결정 기록 0011 결정 절) |
-| `session` | 로그인 상태 | 로그인으로 만든 세션 하나 | 로그인 흐름이 ID 토큰을 검증한 뒤 세션을 발급합니다(결정 기록 0010 결과 절) |
+| `spring_session` | 로그인 상태 | 로그인으로 만든 세션 하나 | 로그인 흐름이 ID 토큰을 검증한 뒤 세션을 발급합니다(결정 기록 0010 결과 절, 결정 기록 0013). Spring Session JDBC의 기본 테이블입니다 |
+| `spring_session_attributes` | 세션에 붙은 속성 | 세션 속성 하나 | 세션에 로그인 정보를 둡니다(결정 기록 0013). Spring Session JDBC의 기본 테이블입니다 |
 
 ### `user`
 
@@ -138,16 +147,29 @@ erDiagram
 - 상태 값과 만료 판단의 규칙은 [규칙과 제약](#규칙과-제약)에 있습니다.
 - 링크를 열어 수락하면 상태를 `수락`으로 바꾸고 `accepted_by`에 수락한 사용자를 적은 뒤 멤버십 행을 만듭니다.
 
-### `session`
+### `spring_session`
 
 | 열 | 형식 | 출처 | 저장 방식 |
 |---|---|---|---|
-| `id` | bigint, 기본 키 | 대리 키 | 평문 |
-| `user_id` | bigint, `user` 참조 | 결정 기록 0010 결과 절(로그인 흐름의 세션 발급) | 평문 |
-| `token_hash` | bytea | 결정 기록 0012 결정 절(세션 토큰은 해시로 저장) | 해시 |
-| `expires_at` | timestamptz | 결정 기록 0010 결정 절(로그인 뒤 세션 유지) | 평문 |
+| `primary_id` | char(36), 기본 키 | Spring Session JDBC 기본 스키마. Spring Session이 만드는 내부 키 | 평문 |
+| `session_id` | char(64), 유일, 체크 제약 `^[0-9a-f]{64}$` | 결정 기록 0013, 결정 기록 0012 결정 절(세션 토큰은 해시로 저장). 기본 스키마의 `CHAR(36)`을 SHA-256 해시의 소문자 16진수 64자 형식으로 바꾼 열입니다. 쿠키의 원문 토큰은 32바이트를 base64url로 바꾼 43자라 형식이 달라서, 해시 래퍼를 거치지 않고 원문이 저장되면 이 제약에 걸려 바로 드러납니다 | 해시 |
+| `creation_time` | bigint | Spring Session JDBC 기본 스키마. 로그인 시각이며 절대 만료 판단에 씁니다(결정 기록 0013) | 평문 |
+| `last_access_time` | bigint | Spring Session JDBC 기본 스키마. 마지막 요청 시각 | 평문 |
+| `max_inactive_interval` | int | Spring Session JDBC 기본 스키마. 유휴 허용 시간(초)이며 7일입니다(결정 기록 0013) | 평문 |
+| `expiry_time` | bigint | Spring Session JDBC 기본 스키마. 마지막 요청 시각에 유휴 허용 시간을 더한 만료 시각 | 평문 |
+| `principal_name` | varchar(100), 비울 수 있음 | Spring Session JDBC 기본 스키마. `user.id`를 문자열로 담습니다. 사용자별 세션을 찾고 탈퇴할 때 삭제하는 데 씁니다 | 평문 |
 
-세션을 쿠키 세션으로 둘지 서비스가 발급하는 자체 토큰으로 둘지는 API 계약이 정합니다. 이 테이블에는 두 방식 모두 쓰는 열만 둡니다.
+### `spring_session_attributes`
+
+| 열 | 형식 | 출처 | 저장 방식 |
+|---|---|---|---|
+| `session_primary_id` | char(36), `spring_session.primary_id` 참조 | Spring Session JDBC 기본 스키마. 세션이 지워지면 속성도 함께 지워집니다 | 평문 |
+| `attribute_name` | varchar(200) | Spring Session JDBC 기본 스키마. 기본 키는 `session_primary_id`와 이 열의 쌍입니다 | 평문 |
+| `attribute_bytes` | bytea | 결정 기록 0013. 로그인 정보를 직렬화한 값입니다. 서비스 사용자 번호와 마지막 인증 시각(ID 토큰의 `auth_time`)만 담고 구글 토큰과 이메일 같은 개인정보는 담지 않습니다 | 평문 |
+
+- 세션 방식은 [결정 기록 0013](../adr/0013-session.md)에서 정했습니다. 로그인은 Spring Security로 하고, 세션은 Spring Session JDBC에 저장합니다. 세션 속성에는 사용자 번호와 마지막 인증 시각(ID 토큰의 `auth_time`)만 담은 로그인 정보가 저장되며, 열을 더하지 않았습니다. 쿠키에는 무작위 토큰을 주고 `session_id`에는 그 토큰의 SHA-256 해시만 저장합니다.
+- 세션은 `user`를 외래 키로 가리키지 않고 `principal_name`에 `user.id`를 문자열로 담습니다. 그래서 사용자 행을 지워도 세션이 저절로 지워지지 않으므로 탈퇴할 때 같은 `principal_name`의 세션을 모두 삭제합니다([삭제와 보존](#삭제와-보존)).
+- 세션은 7일 동안 요청이 없으면 끝나고, 계속 써도 로그인한 지 30일이면 끝납니다(결정 기록 0013). 7일은 `max_inactive_interval`과 `expiry_time`으로 정하고, 30일은 로그인 시각(`creation_time`)으로 셉니다. 절대 30일을 어느 열로 지킬지는 구현에서 정하며 열을 더하지 않았습니다.
 
 ## 단지와 거래
 
@@ -537,7 +559,7 @@ erDiagram
 | 테이블 | 유일한 열 | 근거 |
 |---|---|---|
 | `user` | `provider`, `provider_subject` | 같은 사용자는 제공자와 subject의 쌍으로 찾습니다(결정 기록 0010) |
-| `session` | `token_hash` | 요청의 토큰을 해시해 이 열로 행을 찾습니다 |
+| `spring_session` | `session_id`(해시) | 요청의 쿠키 토큰을 해시해 이 열로 행을 찾습니다 |
 | `invitation` | `token_hash` | 초대 링크의 토큰을 해시해 이 열로 행을 찾습니다 |
 | `household_member` | `user_id` | 1단계에서 한 사용자는 가구 하나에만 속합니다(결정 기록 0011) |
 | `complex` | `apt_seq` | 실거래 단지 번호는 단지마다 하나입니다(결정 기록 0008) |
@@ -588,15 +610,15 @@ PostgreSQL의 유일 조건은 빈 값(NULL)끼리를 서로 다른 값으로 �
 
 | 일 | 삭제하는 것 | 남기는 것 |
 |---|---|---|
-| member가 가구를 나가거나 owner가 member를 제거함 | 그 사람의 멤버십 행. 그 사람이 이 가구에 남긴 임장 기록의 `author_id`를 비웁니다. 그 사람을 가리키는 `listing.created_by`와 `invitation.accepted_by`도 비웁니다 | 그 사람의 임장 기록(체크 결과와 사진 포함)은 가구에 남고, 작성자를 "나간 구성원"으로 표시합니다. 사용자 행, 세션, 알림 설정도 남습니다 |
-| 탈퇴(member는 가구를 나간 뒤, owner는 가구를 삭제한 뒤에만 할 수 있음) | 사용자 행, 세션, 알림 설정, 그 사람의 발송 기록. 그 사람을 가리키는 `listing.created_by`와 `invitation.accepted_by`는 비웁니다 | 그 사람이 등록한 매물과 호가 이력, 나가기 전에 남긴 임장 기록은 가구에 남습니다 |
+| member가 가구를 나가거나 owner가 member를 제거함 | 그 사람의 멤버십 행. 그 사람이 이 가구에 남긴 임장 기록의 `author_id`를 비웁니다. 그 사람을 가리키는 `listing.created_by`와 `invitation.accepted_by`도 비웁니다 | 그 사람의 임장 기록(체크 결과와 사진 포함)은 가구에 남고, 작성자를 "나간 구성원"으로 표시합니다. 사용자 행, 세션(`spring_session`), 알림 설정도 남습니다 |
+| 탈퇴(member는 가구를 나간 뒤, owner는 가구를 삭제한 뒤에만 할 수 있음) | 사용자 행, 그 사람의 세션(`spring_session`에서 `principal_name`이 같은 행과 그 속성. `principal_name`으로 찾은 행은 저장된 `session_id` 값으로 바로 삭제하며 해시를 다시 씌우지 않습니다), 알림 설정, 그 사람의 발송 기록. 그 사람을 가리키는 `listing.created_by`와 `invitation.accepted_by`는 비웁니다 | 그 사람이 등록한 매물과 호가 이력, 나가기 전에 남긴 임장 기록은 가구에 남습니다 |
 | owner가 가구를 삭제함 | 가구에 속한 관심 단지, 매물, 호가 이력, 임장 기록(체크 결과와 사진 포함), 체크리스트 항목, 초대, 멤버십, 가구 행, 그 가구 매물의 방문 알림 발송 기록 | 단지, 거래, 거래 이력, 수집 범위(수집한 자료), 거래 알림 발송 기록, 사용자 행 |
 | 관심 단지에서 뺌 | `interest_complex` 행 하나 | 그 단지의 매물과 임장 기록. 뺀 단지는 관심 단지 목록에서 사라지고, 다시 추가하면 목록, 거래 알림과 방문 알림 대상으로 돌아오며 매물과 기록도 그대로 보입니다. 매물과 기록은 지우지 않지만 다시 추가하기 전까지 화면에 보이지 않습니다. 단지 추가 시트에는 남은 매물 수만, 단지 상세에는 남은 매물 수와 기록 수만 보입니다. 뺀 단지의 매물에는 거래 알림과 방문 알림을 보내지 않습니다 |
 | 체크리스트 항목을 삭제함 | 그 항목 행 | 이미 저장한 체크 결과. 항목 이름을 복사해 두었으므로 옛 기록에 그대로 보입니다 |
 | 매물을 삭제함 | 그 매물, 호가 이력, 임장 기록(체크 결과와 사진 포함), 그 매물의 방문 알림 발송 기록 | 관심 단지 행 |
 | 임장 기록을 삭제함 | 그 기록, 체크 결과, 사진 | 매물과 다른 사람의 기록 |
 
-- 가구를 삭제하면 member가 남긴 임장 기록도 함께 사라집니다. 삭제 전 확인 절차는 API 계약에서 정합니다(결정 기록 0011).
+- 가구를 삭제하면 member가 남긴 임장 기록도 함께 사라집니다. 삭제 전 확인 절차는 가족 공유 기능 명세에서 정합니다(결정 기록 0011, [API 공통 규칙의 넘겨받은 항목 표](api-conventions.md#넘겨받은-항목을-정하는-곳)).
 - 사진은 데이터베이스의 `visit_photo` 행을 삭제할 때 저장소의 파일도 삭제해야 합니다. 파일을 삭제하는 방법은 사진 저장소와 함께 핵심 흐름에서 정합니다.
 
 ## 체크리스트 기본 항목
@@ -634,7 +656,8 @@ PostgreSQL의 유일 조건은 빈 값(NULL)끼리를 서로 다른 값으로 �
 | 항목 | 정하는 문서 |
 |---|---|
 | 사진 파일 저장소, `storage_key`의 형식, 사진 파일을 삭제하는 방법, 사진 파일 암호화 | 핵심 흐름(`docs/architecture/flows.md`, 작성 예정) |
-| 세션을 쿠키 세션으로 둘지 자체 토큰으로 둘지, 초대 링크의 만료 기간 | API 계약(`docs/api/openapi.yaml`, 작성 예정) |
+| 세션 방식 | [결정 기록 0013](../adr/0013-session.md)(정함) |
+| 초대 링크의 만료 기간 | 가족 공유 기능 명세 |
 | 실거래를 매일 다시 받는 기간 | 결정 기록 0009(작성 예정) |
 | 기관마다 다른 단지 키를 잇는 방법과 `bldg_key`, `kapt_code` 값 기록 | 2단계(단지 기본 정보) 계획과 새 결정 기록 |
 | 암호화 키와 HMAC 키를 두는 위치의 구체 값과 키를 바꾸는 절차 | 구현 |
