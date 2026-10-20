@@ -24,8 +24,9 @@
 | 결정 기록 0010. 로그인 방식 | [`docs/adr/0010-login-method.md`](adr/0010-login-method.md) | 작성 완료 |
 | 결정 기록 0011. 가족 공유와 권한 | [`docs/adr/0011-household-sharing.md`](adr/0011-household-sharing.md) | 작성 완료 |
 | 결정 기록 0012. 개인정보 저장 방식 | [`docs/adr/0012-personal-data-storage.md`](adr/0012-personal-data-storage.md) | 작성 완료 |
+| 결정 기록 0013. 세션 방식 | [`docs/adr/0013-session.md`](adr/0013-session.md) | 작성 완료 |
 | 화면 와이어프레임. 1단계 화면과 화면 사이 이동 | [`docs/design/wireframes.md`](design/wireframes.md) | 작성 완료 |
-| API 명세. 화면이 사용하는 API의 OpenAPI 명세 | `docs/api/openapi.yaml` | 작성 예정 |
-| API 안내. 화면 데이터와 API의 대조, 오류 응답과 페이지네이션 규칙 | `docs/api/README.md` | 작성 예정 |
+| API 공통 규칙. 기능마다 만드는 계약이 따를 경로와 형식, 오류와 목록 형식, 권한 확인 순서, 응답에 담는 개인정보 | [`docs/architecture/api-conventions.md`](architecture/api-conventions.md) | 작성 완료 |
 
+- 엔드포인트 단위 계약은 설계 문서로 쓰지 않습니다. SpecKit 계획 단계(`/speckit-plan`)가 기능마다 `specs/NNN-이름/contracts/`에 만듭니다.
 - 작성 예정 문서를 작성하면 경로를 링크로 바꾸고 상태를 작성 완료로 고칩니다.
