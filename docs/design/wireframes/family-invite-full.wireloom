@@ -17,3 +17,5 @@ window:
         button "제거"
       text "duri@example.com" muted size=small
     text "구성원이 둘이라 새 초대를 만들 수 없습니다" muted size=small
+    divider
+    button "가구 삭제"

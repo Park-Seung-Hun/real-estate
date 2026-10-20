@@ -1,0 +1,33 @@
+window:
+  navbar:
+    leading:
+      backbutton "임장 기록 작성"
+    center:
+      text "체크리스트 편집" bold
+  col 360:
+    input placeholder="채광"
+    row:
+      button "올리기"
+      button "내리기"
+      button "삭제"
+    input placeholder="통풍"
+    row:
+      button "올리기"
+      button "내리기"
+      button "삭제"
+    input placeholder="소음"
+    row:
+      button "올리기"
+      button "내리기"
+      button "삭제"
+    input placeholder="누수와 결로"
+    row:
+      button "올리기"
+      button "내리기"
+      button "삭제"
+    divider
+    text "새 항목" muted
+    input placeholder="새 항목 이름"
+    button "항목 추가"
+    text "이미 저장한 기록의 체크 결과는 그대로 남습니다" muted size=small
+    button "완료" primary

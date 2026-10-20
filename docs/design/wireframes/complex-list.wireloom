@@ -15,3 +15,4 @@ window:
     row:
       button "알림 설정"
       button "가족 초대"
+    button "로그아웃"

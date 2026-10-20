@@ -7,12 +7,16 @@ window:
   col 360:
     text "101동 1203호" bold
     text "작성자: 하나(나)" muted
+    text "방문일" muted
+    input placeholder="2026-10-18"
     divider
     section "체크리스트":
-      text "항목은 데이터 모델에서 정합니다. 그림의 항목은 예시입니다." muted size=small
-      checkbox "엘리베이터 상태 (예시)" label-right
-      checkbox "주차 공간 (예시)" checked label-right
-      checkbox "일조 (예시)" label-right
+      button "항목 편집"
+      checkbox "채광" label-right
+      checkbox "소음" checked label-right
+      checkbox "주차" checked label-right
+      checkbox "엘리베이터" label-right
+      checkbox "동 위치" label-right
     section "사진":
       row:
         image label="사진" width=96 height=72
@@ -22,6 +26,5 @@ window:
       input placeholder="메모"
       input placeholder="메모"
     row:
-      input placeholder="점수"
-    text "점수 범위는 데이터 모델에서 정합니다." muted size=small
+      input placeholder="점수 (1에서 5, 비워도 됩니다)"
     button "기록 저장" primary

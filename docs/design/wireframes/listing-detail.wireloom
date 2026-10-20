@@ -31,18 +31,22 @@ window:
       kv "2026-09-28  97,000" "중개사무소(방문이나 전화)"
     divider
     section "임장 기록":
-      text "하나(나)  2026-10-18  점수 4" bold
-      checkbox "엘리베이터 (예시 항목)" checked label-right
-      checkbox "주차 (예시 항목)" label-right
+      text "하나(나)  점수 4" bold
+      row justify=between:
+        text "10월 18일 방문, 10월 19일 작성" muted size=small
+        button "수정"
+      checkbox "엘리베이터" checked label-right
+      checkbox "주차" label-right
       row:
         image label="사진" width=96 height=72
         image label="사진" width=96 height=72
         image label="사진" width=96 height=72
       text "메모: 남향이고 소음이 적음"
       divider
-      text "두리  2026-10-18  점수 3" bold
-      checkbox "엘리베이터 (예시 항목)" checked label-right
-      checkbox "주차 (예시 항목)" checked label-right
+      text "두리  점수 3" bold
+      text "10월 18일 방문, 10월 20일 수정" muted size=small
+      checkbox "엘리베이터" checked label-right
+      checkbox "주차" checked label-right
       row:
         image label="사진" width=96 height=72
       text "메모: 주차장 진입로가 좁음"

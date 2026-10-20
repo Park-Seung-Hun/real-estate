@@ -15,6 +15,7 @@ window:
     row:
       button "알림 설정"
       button "가족 초대"
+    button "로그아웃"
   sheet title="단지 추가":
     input placeholder="이름"
     list:
@@ -22,6 +23,9 @@ window:
         text "새벽동" muted
       slot "예시골 3단지" chevron:
         text "새벽동" muted
+      slot "예시마을 3단지" chevron:
+        text "새벽동" muted
+        text "예전 관심 단지, 매물 2건" muted
       slot "예시뜰 아파트" chevron:
         text "아침동" muted
     button "닫기"

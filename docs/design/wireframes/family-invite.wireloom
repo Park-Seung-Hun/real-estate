@@ -14,3 +14,5 @@ window:
       text "hana@example.com" muted size=small
     button "초대 링크 만들기" primary
     text "만든 링크를 복사해 메신저나 메일로 보냅니다" muted size=small
+    divider
+    button "가구 삭제"
