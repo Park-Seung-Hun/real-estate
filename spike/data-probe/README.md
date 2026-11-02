@@ -24,6 +24,7 @@ LAWD_CD=12345
 | 첫 적재 | `python3 spike/data-probe/probe.py fetch --months 60` | `<out>/<오늘 날짜>/<YYYYMM>.xml`, `fetch.json` |
 | 매일 수집 | `python3 spike/data-probe/probe.py fetch --months 6` | 같은 모양 |
 | 집계 | `python3 spike/data-probe/probe.py analyze` | `<스냅샷 폴더>/summary.md` |
+| 스냅샷 비교 | `python3 spike/data-probe/probe.py compare` | `<out>/compare.md` |
 
 - `--out`의 기본값은 스크립트 위치에서 계산한 저장소 루트(워크트리 안이면 그 위의 원래 체크아웃)의 `.private/data/snapshots`다.
 - 대상 계약년월은 `--date`(기본값은 오늘)가 속한 달부터 거슬러 `--months`개월이다.
@@ -31,6 +32,9 @@ LAWD_CD=12345
 - 같은 날 다시 실행하면 같은 폴더의 같은 달 파일을 덮어쓴다.
 - `analyze`는 폴더를 생략하면 `--out` 아래 가장 최근 날짜 폴더를 쓴다. 월별 건수 표에 보일 개월 수는 `--months`(기본값 12)로 정한다.
 - `summary.md`에는 월별 건수와 해제 건수, 항목별 빈 비율, 식별 키 겹침, 해제와 등기 건수 표 네 개를 쓴다. 지역 코드와 단지 이름은 쓰지 않는다.
+- `compare`는 `--out` 아래 날짜 폴더를 모두 읽어 계약월마다 바로 앞 스냅샷과 비교한다. 폴더가 2개 미만이면 종료 코드 1로 끝난다. 보고서 위치는 `--report`로 바꾼다.
+- 그날 `fetch.json`의 `failed`에 든 달은 파일이 남아 있어도 없는 것으로 치고, 그 앞 성공 스냅샷과 비교한다.
+- `compare.md`에는 신규/해제/사라짐 건수와 지연, 계약 뒤 등기와 해제가 생기는 시점을 쓴다. 지역 코드, 단지 일련번호, 단지 이름, 지번, 도로명은 쓰지 않는다.
 
 ## 호출 수
 
