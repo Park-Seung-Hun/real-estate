@@ -3,6 +3,7 @@
 
 fetch   : 공공데이터포털 API로 최근 N개월 실거래를 받아 날짜별 스냅샷 폴더에 원본 XML로 저장한다.
 analyze : 스냅샷 하나를 읽어 월별 건수, 항목별 빈 비율, 식별 키 겹침, 해제 건수를 표로 낸다.
+compare : 날짜별 스냅샷을 서로 비교해 신규/해제/사라짐과 등기 시점을 마크다운 보고서로 낸다.
 
 표준 라이브러리만 쓰고 Python 3.9에서 돈다.
 """
@@ -13,6 +14,7 @@ import http.client
 import json
 import math
 import re
+import statistics
 import sys
 import time
 import urllib.error
@@ -415,6 +417,263 @@ def cmd_analyze(args):
     print(text)
     return 0
 
+# ---------------------------------------------------------------- compare
+
+CHANGE_FIELDS = ["rgstDate", "aptDong", "cdealDay", "dealingGbn", "buyerGbn",
+                 "slerGbn", "estateAgentSggNm"]
+DELAY_BINS = [(0, 9, "0~9"), (10, 19, "10~19"), (20, 29, "20~29"),
+              (30, 59, "30~59"), (60, 89, "60~89"), (90, None, "90 이상")]
+STAT_HEADERS = ["구분", "건수", "중앙값(일)", "90번째 백분위수(일)", "최댓값(일)", "최솟값(일)"]
+
+
+def parse_yymmdd(text):
+    """'YY.MM.DD'를 date로 읽는다. 비었거나 형식이 다르면 None."""
+    m = re.fullmatch(r"(\d{2})\.(\d{2})\.(\d{2})", (text or "").strip())
+    if not m:
+        return None
+    try:
+        return datetime.date(2000 + int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def contract_date(item):
+    try:
+        return datetime.date(int(item["dealYear"]), int(item["dealMonth"]), int(item["dealDay"]))
+    except (KeyError, ValueError):
+        return None
+
+
+def nearest_rank(values, p):
+    s = sorted(values)
+    return s[max(1, int(math.ceil(p / 100.0 * len(s)))) - 1]
+
+
+def stat_cells(values):
+    """(건수, 중앙값, 90번째 백분위수, 최댓값, 최솟값). 값이 없으면 '-'."""
+    if not values:
+        return [0, "-", "-", "-", "-"]
+    med = statistics.median(values)
+    med = int(med) if med == int(med) else med
+    return [len(values), med, nearest_rank(values, 90), max(values), min(values)]
+
+
+def month_end(ymd, add):
+    """ymd(YYYYMM)에서 add개월 뒤 달의 말일."""
+    idx = int(ymd[:4]) * 12 + int(ymd[4:]) - 1 + add
+    y, m = divmod(idx, 12)
+    nxt = datetime.date(y + (m + 1) // 12, (m + 1) % 12 + 1, 1)
+    return nxt - datetime.timedelta(days=1)
+
+
+def trade_key(item):
+    base = tuple(item.get(f, "").strip() for f in KEY_BASE)
+    return base + (not is_blank(item.get("cdealType")),)
+
+
+def load_effective(snap_dir):
+    """(월 -> item 목록, 실패한 달 목록). 그날 fetch.json의 failed에 든 달은 뺀다."""
+    failed = []
+    meta_path = snap_dir / "fetch.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        failed = [f["month"] for f in meta.get("failed", [])]
+    by_month = read_snapshot(snap_dir)
+    return {m: v for m, v in by_month.items() if m not in failed}, failed
+
+
+def compare_pair(prev, cur, snap_date, first_date, acc, month_row):
+    """같은 달의 앞뒤 스냅샷 item 목록을 비교해 acc와 month_row에 쌓는다."""
+    rows_prev, rows_cur = collections.defaultdict(list), collections.defaultdict(list)
+    for i in prev:
+        rows_prev[trade_key(i)].append(i)
+    for i in cur:
+        rows_cur[trade_key(i)].append(i)
+    vanished = collections.Counter()  # 해제 아닌 키의 사라진 건수, 해제 짝 판정용
+    cancel_new = []                   # (키, 새로 생긴 건수)
+    for key in set(rows_prev) | set(rows_cur):
+        pa, pb = rows_prev.get(key, []), rows_cur.get(key, [])
+        a, b, cancel = len(pa), len(pb), key[-1]
+        if b > a:
+            n = b - a
+            c_date = contract_date(pb[0])
+            delay = (snap_date - c_date).days if c_date else None
+            if cancel:
+                month_row["해제"] += n
+                cancel_new.append((key, n))
+                if delay is not None:
+                    acc["cancel_from_contract"] += [delay] * n
+                for r in pb[:n]:
+                    cd = parse_yymmdd(r.get("cdealDay"))
+                    if cd:
+                        acc["cancel_from_event"].append((snap_date - cd).days)
+            else:
+                month_row["신규"] += n
+                if delay is not None:
+                    group = "after" if c_date >= first_date else "before"
+                    acc["new_" + group] += [delay] * n
+        elif b < a:
+            month_row["사라짐"] += a - b
+            if not cancel:
+                vanished[key[:-1]] += a - b
+            else:
+                acc["vanished_unpaired"] += a - b
+        elif a >= 1:
+            blank = lambda rows, f: sum(1 for r in rows if is_blank(r.get(f)))
+            month_row["등기일 채워짐"] += max(0, blank(pa, "rgstDate") - blank(pb, "rgstDate"))
+            month_row["동 채워짐"] += max(0, blank(pa, "aptDong") - blank(pb, "aptDong"))
+            if a == 1:
+                for f in CHANGE_FIELDS:
+                    x, y = pa[0].get(f, "").strip(), pb[0].get(f, "").strip()
+                    if x and y and x != y:
+                        month_row["값 바뀜"] += 1
+    for key, n in cancel_new:
+        paired = min(n, vanished[key[:-1]])
+        vanished[key[:-1]] -= paired
+        acc["pair_removed"] += paired
+        acc["pair_only"] += n - paired
+    acc["vanished_unpaired"] += sum(vanished.values())
+
+
+def delay_row(label, values):
+    return [label] + stat_cells(values)
+
+
+def build_compare(out_dir, dirs):
+    snaps = []  # (date, 월 -> items, 실패한 달)
+    for d in dirs:
+        by_month, failed = load_effective(d)
+        snaps.append((parse_date_dir(d.name), by_month, failed))
+    first_date, last_date = snaps[0][0], snaps[-1][0]
+    acc = collections.defaultdict(list)
+    for k in ("pair_removed", "pair_only", "vanished_unpaired"):
+        acc[k] = 0
+    month_rows = collections.defaultdict(lambda: collections.Counter())
+
+    # 1. 스냅샷
+    snap_rows = []
+    for date, by_month, failed in snaps:
+        ms = sorted(by_month)
+        snap_rows.append((date.isoformat(), len(ms), "%s ~ %s" % (ms[0], ms[-1]) if ms else "-",
+                          ", ".join(failed) if failed else "없음"))
+    have = {s[0] for s in snaps}
+    gaps = [(first_date + datetime.timedelta(days=n)).isoformat()
+            for n in range((last_date - first_date).days + 1)
+            if first_date + datetime.timedelta(days=n) not in have]
+
+    # 비교
+    series = collections.defaultdict(list)  # 월 -> [(date, items)]
+    for date, by_month, _ in snaps:
+        for m, items in by_month.items():
+            series[m].append((date, items))
+    for m, lst in series.items():
+        month_rows[m]["스냅샷"] = len(lst)
+        month_rows[m]["첫"] = len(lst[0][1])
+        month_rows[m]["마지막"] = len(lst[-1][1])
+        for (_, prev), (date, cur) in zip(lst, lst[1:]):
+            compare_pair(prev, cur, date, first_date, acc, month_rows[m])
+
+    parts = ["# 스냅샷 비교", "", "## 스냅샷", "",
+             md_table(["날짜", "받은 달 수", "받은 달 범위", "실패한 달"], snap_rows), "",
+             "폴더가 없는 날짜: %s" % (", ".join(gaps) if gaps else "없음"), ""]
+
+    # 2. 계약월별 변화
+    cols = ["신규", "해제", "사라짐", "등기일 채워짐", "동 채워짐", "값 바뀜"]
+    rows, total = [], collections.Counter()
+    for m in sorted(series):
+        r = month_rows[m]
+        if r["스냅샷"] < 2:
+            continue
+        rows.append([m, r["스냅샷"], r["첫"], r["마지막"]] + [r[c] for c in cols])
+        for c in ["스냅샷", "첫", "마지막"] + cols:
+            total[c] += r[c]
+    rows.append(["합계", total["스냅샷"], total["첫"], total["마지막"]] + [total[c] for c in cols])
+    parts += ["## 계약월별 변화", "",
+              md_table(["계약년월", "비교한 스냅샷 수", "첫 스냅샷 건수", "마지막 스냅샷 건수"] + cols, rows), ""]
+
+    # 3. 신규 지연
+    allnew = acc["new_after"] + acc["new_before"]
+    bins = []
+    for lo, hi, label in DELAY_BINS:
+        bins.append((label, sum(1 for v in allnew if v >= lo and (hi is None or v <= hi))))
+    parts += ["## 신규 지연", "",
+              md_table(STAT_HEADERS, [
+                  delay_row("첫 스냅샷 날짜 이후 계약", acc["new_after"]),
+                  delay_row("그 전 계약", acc["new_before"]),
+                  delay_row("전체", allnew)]), "",
+              md_table(["구간(일)", "건수"], bins), ""]
+
+    # 4. 해제
+    parts += ["## 해제", "",
+              md_table(STAT_HEADERS, [
+                  delay_row("계약일부터 나타날 때까지", acc["cancel_from_contract"]),
+                  delay_row("해제사유발생일부터 나타날 때까지", acc["cancel_from_event"])]), "",
+              md_table(["구분", "건수"], [
+                  ("해제 전 행이 같은 날 빠짐", acc["pair_removed"]),
+                  ("해제 행만 나타남", acc["pair_only"]),
+                  ("해제 짝 없는 사라짐", acc["vanished_unpaired"])]), ""]
+
+    # 5. 등기와 해제 시점
+    ref_date, ref_months = max(((d, bm) for d, bm, _ in snaps), key=lambda x: (len(x[1]), -x[0].toordinal()))
+    cutoff = ref_date - datetime.timedelta(days=365)
+    targets = []  # (계약월, 계약일, 등기일, 해제사유발생일)
+    for m, items in ref_months.items():
+        for i in items:
+            c = contract_date(i)
+            if c and c < cutoff:
+                targets.append((m, c, parse_yymmdd(i.get("rgstDate")), parse_yymmdd(i.get("cdealDay"))))
+    rg = [(m, c, r) for m, c, r, _ in targets if r]
+    cd = [(m, c, x) for m, c, _, x in targets if x]
+    rg_days = [(r - c).days for _, c, r in rg]
+    cd_days = [(x - c).days for _, c, x in cd]
+    ta = []
+    for label, days in (("등기일", rg_days), ("해제사유발생일", cd_days)):
+        cells = stat_cells(days)
+        ta.append([label, len(targets), cells[0], cells[1], cells[2], cells[3]])
+    tb = []
+    for t in (30, 60, 90, 120, 150, 180, 270, 365):
+        tb.append([t, pct(sum(1 for v in rg_days if v > t), len(rg_days)),
+                   pct(sum(1 for v in cd_days if v > t), len(cd_days))])
+    tc = []
+    for n in (3, 4, 6, 12):
+        spans = [(month_end(m, n - 1) - c).days for m, c, _, _ in targets]
+        miss_r = sum(1 for m, c, r in rg if r > month_end(m, n - 1))
+        miss_c = sum(1 for m, c, x in cd if x > month_end(m, n - 1))
+        tc.append(["%d개월" % n, "%d~%d" % (min(spans), max(spans)) if spans else "-",
+                   pct(miss_r, len(rg)), pct(miss_c, len(cd))])
+    parts += ["## 계약 뒤 등기와 해제가 생기는 시점", "",
+              "기준 스냅샷은 %s이다(받은 달 %d개). 이 날짜보다 365일 넘게 앞선 계약 %d건을 본다."
+              % (ref_date.isoformat(), len(ref_months), len(targets)), "",
+              md_table(["항목", "대상 계약 건수", "값 있는 건수", "중앙값(일)",
+                        "90번째 백분위수(일)", "최댓값(일)"], ta), "",
+              md_table(["기준(일)", "등기일이 이보다 늦은 비율(%)",
+                        "해제사유발생일이 이보다 늦은 비율(%)"], tb), "",
+              md_table(["다시 받는 기간", "지켜보는 기간(일, 최소~최대)", "놓치는 등기일(%)",
+                        "놓치는 해제사유발생일(%)"], tc), ""]
+
+    # 6. 계산 방법
+    parts += ["## 계산 방법", "",
+              "- 거래 키는 %s에 해제 여부(`cdealType`이 비어 있지 않으면 해제)를 더한 것이다. 값은 앞뒤 공백을 지워 비교하고, 같은 키가 여러 행이면 건수로 센다." % ", ".join(KEY_BASE),
+              "- 계약월마다 그 달 파일이 있는 스냅샷을 날짜순으로 놓고 바로 앞 스냅샷과 비교한다. 건수가 늘면 신규(해제 키는 해제), 줄면 사라짐이고, 같으면 등기일과 동의 빈 행 감소를 채워짐으로, 한 건짜리는 일곱 항목의 바뀐 값을 센다.",
+              "- 지연은 뒤 스냅샷 날짜에서 계약일(또는 해제사유발생일)을 뺀 일수다. 백분위수는 가장 가까운 순위 방식(정렬 뒤 ceil(p/100*n)번째)이고 중앙값은 `statistics.median`이다.",
+              "- 그날 `fetch.json`의 `failed`에 든 달은 파일이 남아 있어도 없는 것으로 치고, 앞 성공 스냅샷과 비교한다.",
+              "- 해제 짝은 같은 날 같은 달 비교에서 해제 여부만 다른 키가 사라졌는지로 정한다. 표 B와 C의 비율 분모는 값 있는 건수이고, N개월 표의 마지막 날은 계약월 말일에서 N-1개월 뒤 달의 말일이다.",
+              "- 지역 코드, 단지 일련번호, 단지 이름, 지번, 도로명, 금액은 쓰지 않는다.", ""]
+    return "\n".join(parts)
+
+
+def cmd_compare(args):
+    out = Path(args.out)
+    dirs = sorted(p for p in out.iterdir() if p.is_dir() and parse_date_dir(p.name) is not None) \
+        if out.is_dir() else []
+    if len(dirs) < 2:
+        print("비교하려면 날짜 폴더가 2개 이상 필요하다: %s" % out, file=sys.stderr)
+        return 1
+    report = Path(args.report) if args.report else out / "compare.md"
+    report.write_text(build_compare(out, dirs), encoding="utf-8")
+    print(report)
+    return 0
+
 
 def main():
     p = argparse.ArgumentParser(description="실거래 데이터 확인용 스크립트")
@@ -435,6 +694,12 @@ def main():
                    help="기본값은 저장소 루트의 .private/data/snapshots")
     a.add_argument("--months", type=int, default=12)
     a.set_defaults(func=cmd_analyze)
+
+    c = sub.add_parser("compare", help="날짜별 스냅샷을 비교해 보고서를 씀")
+    c.add_argument("--out", default=DEFAULT_OUT,
+                   help="기본값은 저장소 루트의 .private/data/snapshots")
+    c.add_argument("--report", help="기본값은 <out>/compare.md")
+    c.set_defaults(func=cmd_compare)
 
     args = p.parse_args()
     sys.exit(args.func(args))
