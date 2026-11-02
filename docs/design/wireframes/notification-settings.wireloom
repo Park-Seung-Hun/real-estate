@@ -5,11 +5,15 @@ window:
     center:
       text "알림 설정" bold
   col 360:
-    text "알림 받을 메일" muted
-    input placeholder="알림 받을 메일"
+    text "알림은 구글 로그인 이메일로 보냅니다" muted
     divider
     checkbox "거래 알림" checked label-right
     text "관심 단지에 새 거래나 해제가 신고되면 메일을 보냅니다" muted
-    checkbox "방문 하루 전 알림" checked label-right
-    text "방문 일시 하루 전에 메일을 보냅니다" muted
+    checkbox "방문 알림" checked label-right
+    text "방문 일시가 있는 매물이 있으면 고른 시점에 메일을 보냅니다" muted
+    text "방문 알림 시점" muted
+    segmented:
+      segment "3시간 전"
+      segment "하루 전" selected
+      segment "이틀 전"
     button "저장" primary
