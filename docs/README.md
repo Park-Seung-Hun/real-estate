@@ -29,6 +29,7 @@
 | 결정 기록 0015. 주소를 좌표로 변환하는 곳과 좌표 저장 | [`docs/adr/0015-geocoder.md`](adr/0015-geocoder.md) | 작성 완료 |
 | 화면 와이어프레임. 1단계 화면과 화면 사이 이동 | [`docs/design/wireframes.md`](design/wireframes.md) | 작성 완료 |
 | API 공통 규칙. 기능마다 만드는 계약이 따를 경로와 형식, 오류와 목록 형식, 권한 확인 순서, 응답에 담는 개인정보 | [`docs/architecture/api-conventions.md`](architecture/api-conventions.md) | 작성 완료 |
+| 백로그. 1단계 기능 목록과 구현 순서 | [`docs/backlog.md`](backlog.md) | 작성 완료 |
 
 - 엔드포인트 단위 계약은 설계 문서로 작성하지 않습니다. SpecKit 계획 단계(`/speckit-plan`)가 기능마다 `specs/NNN-이름/contracts/`에 만듭니다.
 - 작성 예정 문서를 작성하면 경로를 링크로 바꾸고 상태를 작성 완료로 고칩니다.
