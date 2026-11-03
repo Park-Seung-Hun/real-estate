@@ -1,50 +1,71 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# 아파트 임장 기록과 실거래 알림 Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. 공식 API만 사용
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+- 외부 데이터는 기관이 공개하는 공식 API에서만 수집합니다.
+- 부동산 앱 화면 수집, 매물 호가 수집, KB 시세 수집을 하지 않습니다. 매물 링크를 받아 서버가 그 페이지를 읽는 방식도 화면 수집에 해당합니다.
+- 블로그, 카페, 앱 후기는 저장하지 않습니다.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+이유: 호가와 KB 단지별 시세는 개인이 쓸 수 있는 공식 API가 없고, 시세 공개 기관과 검색 API의 이용 조건이 자동 수집이나 결과 저장을 금지하기 때문입니다. 공식 API에 없는 호가와 KB 시세는 사용자가 직접 입력합니다([결정 기록 0001](../../docs/adr/0001-official-api-only.md)).
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. 자체 화면 입력
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+- 임장 기록, 매물, 호가는 서비스 자체 화면에서 사용자가 입력합니다. 1단계 화면은 휴대폰 화면 폭을 기준으로 한 웹입니다.
+- 노션 연동과 기존 노션 기록 옮기기는 범위에 넣지 않습니다.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+이유: 노션 연동은 기록이 정해진 템플릿 구조여야 읽어 올 수 있어 아직 고려 대상이 아니기 때문입니다([결정 기록 0002](../../docs/adr/0002-own-input-screen.md)).
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. 실제 데이터를 저장소에 두지 않음
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+- 실제 임장 기록, 주소, 사진, API 인증키는 저장소에 올리지 않습니다. 인증키는 환경 변수나 `.env`(저장소 추적 제외)에 둡니다.
+- 문서의 예시, 테스트 fixture, 시드 데이터는 가짜 단지명과 가짜 주소로 만듭니다.
+- 공개 문서에는 실제 관심 지역 이름 대신 "관심 지역"이나 "한 자치구"를 씁니다.
+- 커밋 전에 실제 데이터와 인증키가 섞이지 않았는지 확인합니다.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+이유: 이 저장소는 공개 저장소이기 때문입니다.
+
+### IV. 설계 문서를 따름
+
+- 기능의 `contracts/`는 [API 공통 규칙](../../docs/architecture/api-conventions.md)을 따릅니다.
+- 기능의 `data-model.md`는 [데이터 모델](../../docs/architecture/data-model.md)을 참조하고, 그 기능이 다루는 테이블만 적습니다.
+- 용어는 [설계 문서 지도의 용어 표](../../docs/README.md#용어)를 따릅니다. 표에서 쓰지 않기로 한 이름을 spec, plan, 코드 주석에 쓰지 않습니다.
+- 설계 문서와 다른 결정이 필요하면 구현보다 먼저 결정 기록(`docs/adr/`)을 고치거나 새로 씁니다.
+- 기능은 [백로그](../../docs/backlog.md)의 순서와 경계를 따릅니다.
+
+이유: 설계 문서가 정한 규칙(권한 확인 순서, 기준 적재, 삭제 연쇄 등)이 기능마다 다르게 다시 정해지면 기능 사이에서 어긋나기 때문입니다.
+
+### V. 기능마다 테스트
+
+- 기능마다 spec의 acceptance를 검증하는 테스트를 둡니다. 검증할 수 없는 acceptance는 spec 단계에서 고칩니다.
+- 보안 경계(권한 확인, 재인증, 삭제 연쇄)를 검증하는 테스트는 그 기능을 구현한 사람이나 에이전트와 다른 사람이나 에이전트가 요구사항에서 직접 씁니다.
+- 테스트를 먼저 쓰는 순서(TDD)는 강제하지 않습니다.
+
+이유: 구현과 테스트를 같은 사람이나 에이전트가 쓰면 요구사항을 잘못 읽었을 때 테스트도 같은 오해를 담아 통과하기 때문입니다.
+
+## 기술 제약
+
+- 서버는 Java와 Spring Boot, 데이터베이스는 PostgreSQL입니다([C4 컨테이너](../../docs/architecture/c4-container.md)).
+- 1단계와 2단계는 API 서버, collector, 알림 발송기를 한 애플리케이션 안의 모듈로 실행합니다([결정 기록 0005](../../docs/adr/0005-modular-monolith.md)).
+- Kafka, Redis, Kubernetes 같은 기술은 [결정 기록 0004](../../docs/adr/0004-staged-adoption.md)의 단계와 도입 조건을 측정한 뒤에 들입니다. 조건을 측정하지 않은 채 앞당겨 넣지 않습니다.
+- 웹 화면 기술은 이 문서에서 정하지 않습니다. 화면이 처음 나오는 기능의 plan에서 정하고 결정 기록으로 남깁니다.
+
+## 개발 흐름
+
+- 기능 구현은 SpecKit(`/speckit-specify`, `/speckit-plan`, `/speckit-tasks`, `/speckit-implement`)으로만 합니다. SpecKit 없이 하는 작업은 출시한 버전의 버그 수정(`hotfix/*`), 설정과 도구(`chore/*`), 문서(`docs/*`)뿐입니다.
+- 브랜치 규칙은 저장소의 `CLAUDE.md`가 기준입니다. 요약하면 다음과 같습니다.
+  - `main`은 출시한 상태만 두고 머지 커밋에 `vN.0.0` 태그를 답니다.
+  - `develop/vN`은 단계 N의 개발 브랜치이고, 한 번에 하나만 엽니다.
+  - 기능 브랜치 `NNN-기능이름`은 `develop/vN`에서 만들고, 이름은 `specs/` 아래 폴더 이름과 같습니다.
+  - `docs/*`와 `chore/*`는 `develop/vN`에서, `hotfix/vN.0.x`는 `main`에서 만듭니다.
+  - 머지는 모두 `--no-ff`로 하고, 머지한 브랜치는 지웁니다.
+- 기능 번호와 순서는 백로그를 따릅니다. 기능 브랜치의 번호는 `develop/vN`의 `specs/`에 있는 마지막 번호 다음을 씁니다.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- 이 문서는 기능의 spec, plan, tasks, 구현보다 우선합니다. 어긋나면 이 문서에 맞추거나, 이 문서를 먼저 고칩니다.
+- 이 문서는 `docs/*` 브랜치에서 고치고, 고칠 때마다 버전을 올립니다. 원칙을 빼거나 뜻을 바꾸면 MAJOR, 원칙이나 절을 추가하면 MINOR, 문구만 다듬으면 PATCH를 올립니다.
+- 각 기능의 plan 단계(Constitution Check)에서 다섯 원칙을 확인하고, 지키지 못하는 원칙이 있으면 이유를 plan에 적습니다.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-11-03 | **Last Amended**: 2026-11-03
