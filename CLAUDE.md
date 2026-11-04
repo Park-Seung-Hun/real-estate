@@ -58,5 +58,5 @@
 - SpecKit은 브랜치를 만들지 않는다(git extension을 설치하지 않았다). 기능 브랜치는 워크트리와 함께 직접 만들고, 그 워크트리 안에서 `/speckit-specify`를 실행한다. 번호는 `develop/vN`의 `specs/`에 있는 마지막 번호 다음을 쓴다.
 
 ```
-git worktree add .worktrees/001-login-household -b 001-login-household develop/v1
+git worktree add .worktrees/001-login -b 001-login develop/v1
 ```
