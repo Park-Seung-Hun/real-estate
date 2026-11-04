@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: estate
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 스키마는 Flyway만 만들고, Hibernate는 엔티티와 어긋나는지 검증만 한다
+      ddl-auto: validate
