@@ -4,8 +4,9 @@
 
 ## 지금 상태
 
-- 설계를 마치고 1단계 구현을 준비하고 있습니다. 실행할 수 있는 코드는 아직 없고, 실행 방법은 첫 기능을 구현할 때 이 문서에 적습니다.
-- 백로그는 1단계를 SpecKit 기능 여섯 개로 나누고 구현 순서를 정합니다([백로그](docs/backlog.md)). 진행 상태는 백로그의 상태 열과 GitHub Milestone [`v1`](https://github.com/Park-Seung-Hun/real-estate/milestone/1)에서 봅니다.
+- 설계를 마치고 1단계 구현을 준비하고 있습니다. 앱 골격(Spring Boot, Flyway, Testcontainers)만 있고 기능 코드는 아직 없습니다. 앱을 실행하는 방법은 첫 기능을 구현할 때 이 문서에 적습니다.
+- 테스트는 Java 25와 Docker가 필요하며 `./gradlew test`로 실행합니다. 데이터베이스가 걸린 테스트는 Docker로 띄운 실제 PostgreSQL에서 실행합니다.
+- 백로그는 1단계를 SpecKit 기능 열 개로 나누고 구현 순서를 정합니다([백로그](docs/backlog.md)). 진행 상태는 백로그의 상태 열과 GitHub Milestone [`v1`](https://github.com/Park-Seung-Hun/real-estate/milestone/1)에서 봅니다.
 - 기능은 SpecKit으로 구현하고, 기능마다 명세와 계획을 `specs/`에 남깁니다.
 
 ## 왜 만드나
