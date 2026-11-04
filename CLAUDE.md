@@ -1,6 +1,6 @@
 # 작업 가이드
 
-이 저장소는 아파트 임장 기록과 실거래 알림을 다루는 개인용 서비스다. 지금은 설계 단계라 코드보다 설계 문서를 먼저 쓴다. 공개 저장소로 운영할 예정이다.
+이 저장소는 아파트 임장 기록과 실거래 알림을 다루는 개인용 서비스다. 지금은 설계 단계라 코드보다 설계 문서를 먼저 쓴다. 공개 저장소다.
 
 세션을 시작하면 아래 인계 문서부터 읽고 이어서 작업한다. 이 문서는 비공개 폴더에 있어 공개 저장소에서는 보이지 않는다.
 
@@ -31,9 +31,11 @@
 
 ## 구현
 
-- 기능 구현은 SpecKit(`/speckit-specify`, `/speckit-plan`, `/speckit-tasks`, `/speckit-implement`)으로만 한다.
-- SpecKit 없이 하는 작업은 출시한 버전의 버그 수정(`hotfix/*`), 설정과 도구(`chore/*`), 문서(`docs/*`)뿐이다.
-- SpecKit 없이 한 수정이 기능 동작을 바꾸면, 그 기능의 `specs/NNN-이름/spec.md`에서 해당 요구사항을 같은 브랜치에서 직접 고친다. 자세한 절차는 이런 수정이 처음 생길 때 정한다.
+- 기능은 SpecKit으로 spec, plan, tasks를 만든다. 순서는 `/speckit-specify`, 필요하면 `/speckit-clarify`, `/speckit-plan`, `/speckit-tasks`이고, 마지막에 `/speckit-analyze`로 세 문서를 점검한다.
+- SpecKit 명령은 실행 전에 넘길 프롬프트 전문을 사용자에게 보여 주고 승인받는다.
+- 구현에는 `/speckit-implement`를 사용하지 않는다. 구현 전에 `specs/NNN-이름/checklists/`의 미완료 항목을 확인하고, tasks.md 순서대로 단계마다 검토를 거쳐 구현하며, 끝낸 작업은 tasks.md에 `[X]`로 표시한다. 코드가 처음 들어가는 기능은 무시 파일(`.gitignore` 등)도 확인한다. 기능을 마치기 전에 전체 테스트를 통과시키고, 기능 브랜치 전체를 spec, plan, tasks와 대조하는 최종 리뷰를 한다.
+- spec, plan, tasks 없이 하는 작업은 출시한 버전의 버그 수정(`hotfix/*`), 설정과 도구(`chore/*`), 문서(`docs/*`)뿐이다.
+- spec, plan, tasks 없이 한 수정이 기능 동작을 바꾸면, 그 기능의 `specs/NNN-이름/spec.md`에서 해당 요구사항을 같은 브랜치에서 직접 고친다. 자세한 절차는 이런 수정이 처음 생길 때 정한다.
 
 ## 브랜치
 
@@ -56,5 +58,5 @@
 - SpecKit은 브랜치를 만들지 않는다(git extension을 설치하지 않았다). 기능 브랜치는 워크트리와 함께 직접 만들고, 그 워크트리 안에서 `/speckit-specify`를 실행한다. 번호는 `develop/vN`의 `specs/`에 있는 마지막 번호 다음을 쓴다.
 
 ```
-git worktree add .worktrees/001-visit-log -b 001-visit-log develop/v1
+git worktree add .worktrees/001-login-household -b 001-login-household develop/v1
 ```
