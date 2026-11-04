@@ -27,6 +27,7 @@
 | 결정 기록 0013. 세션 방식 | [`docs/adr/0013-session.md`](adr/0013-session.md) | 작성 완료 |
 | 결정 기록 0014. 사진과 원본 응답 파일 저장소 | [`docs/adr/0014-file-storage.md`](adr/0014-file-storage.md) | 작성 완료 |
 | 결정 기록 0015. 주소를 좌표로 변환하는 곳과 좌표 저장 | [`docs/adr/0015-geocoder.md`](adr/0015-geocoder.md) | 작성 완료 |
+| 결정 기록 0016. 기반 스택과 데이터 접근 방식 | [`docs/adr/0016-base-stack.md`](adr/0016-base-stack.md) | 작성 완료 |
 | 화면 와이어프레임. 1단계 화면과 화면 사이 이동 | [`docs/design/wireframes.md`](design/wireframes.md) | 작성 완료 |
 | API 공통 규칙. 기능마다 만드는 계약이 따를 경로와 형식, 오류와 목록 형식, 권한 확인 순서, 응답에 담는 개인정보 | [`docs/architecture/api-conventions.md`](architecture/api-conventions.md) | 작성 완료 |
 | 백로그. 1단계 기능 목록과 구현 순서 | [`docs/backlog.md`](backlog.md) | 작성 완료 |

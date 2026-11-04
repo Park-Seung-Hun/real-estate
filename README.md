@@ -43,6 +43,7 @@
 | 재수집 기간 | 신고와 해제가 늦게 들어오므로 매일 이번 달을 포함한 최근 6개월을 다시 수집합니다 | [0009](docs/adr/0009-refetch-window.md) |
 | 로그인과 세션 | 구글 OIDC로 로그인합니다. 브라우저에 JWT를 발급하지 않고 서버가 저장하는 세션을 사용하며, 민감한 동작 앞에서는 구글 인증을 한 번 더 거칩니다 | [0010](docs/adr/0010-login-method.md), [0013](docs/adr/0013-session.md) |
 | 개인정보 저장 | 로그인 이메일, 매물 주소, 동과 호를 애플리케이션 계층에서 AES-GCM으로 암호화해 저장합니다 | [0012](docs/adr/0012-personal-data-storage.md) |
+| 기반 스택 | Java 25, Spring Boot 4.1, Gradle, Flyway를 사용합니다. 데이터는 Spring Data JPA를 기본으로 접근하고, 잠금과 대량 반영과 집계는 SQL을 직접 씁니다 | [0016](docs/adr/0016-base-stack.md) |
 
 ## 데이터 원칙
 
