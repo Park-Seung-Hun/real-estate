@@ -54,6 +54,7 @@
 - `develop/vN`은 한 번에 하나만 연다. 다음 단계의 브랜치는 이전 단계를 `main`에 머지하고 태그를 단 뒤 만든다.
 - 출시 전 마무리(버전 번호, 변경 기록)는 `develop/vN`의 마지막 커밋으로 한다.
 - 머지는 모두 `--no-ff`로 하고, 머지한 브랜치는 지운다.
+- 기능 브랜치(`NNN-기능이름`, `docs/*`, `chore/*`)에 `develop/vN`의 새 커밋이 필요하면 `git rebase develop/vN`으로 가져온다. 병합 커밋이 쌓이지 않아 브랜치가 `develop/vN` 위에 일직선으로 놓이고, `develop/vN`에 넣을 때 `--no-ff` 머지 한 번으로 기능 하나가 한 덩어리로 보인다. 브랜치를 origin에 push한 뒤에는 rebase하지 않고 `develop/vN`을 머지한다.
 - 여러 문서나 파일에 걸친 작업은 브랜치를 워크트리로 체크아웃해 `.worktrees/<브랜치 이름>`에서 한다. `.private/`는 git이 추적하지 않아 워크트리에는 없으므로 원래 체크아웃의 `.private/`에서 읽는다.
 - SpecKit은 브랜치를 만들지 않는다(git extension을 설치하지 않았다). 기능 브랜치는 워크트리와 함께 직접 만들고, 그 워크트리 안에서 `/speckit-specify`를 실행한다. 번호는 `develop/vN`의 `specs/`에 있는 마지막 번호 다음을 쓴다.
 
