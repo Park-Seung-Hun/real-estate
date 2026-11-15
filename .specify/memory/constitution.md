@@ -84,7 +84,7 @@ plan의 Constitution Check에서 답합니다. 위반을 처리하는 방법은 
   결정 기록이 정한 확장 지점([결정 기록 0003](../../docs/adr/0003-notification-channel.md)의 "발송 채널을 별도 모듈로
   분리")은 예외입니다.
 - **SHOULD** Spring이 제공하는 기능을 감싸기만 하는 계층을 두지 않고 직접 사용합니다. 결정 기록이 정한 계층
-  ([결정 기록 0013](../../docs/adr/0013-session.md)의 Spring Session 해시 저장 래퍼 등)은 해당하지 않습니다.
+  ([결정 기록 0013](../../docs/adr/0013-session.md)의 Spring Session 세션 ID 해시 변환 등)은 해당하지 않습니다.
 
 점검: 이 plan에 결정 기록이나 설계 문서가 정하지 않은 확장 지점이 있는가? 결정 기록이 정하지 않았는데 Spring 기능을
 감싸기만 하는 계층이 있는가?
@@ -101,10 +101,10 @@ Article VIII(Framework Trust)를 참고했습니다(https://github.com/github/sp
 - **MUST** Kafka, Redis, Kubernetes 같은 기술은 [결정 기록 0004](../../docs/adr/0004-staged-adoption.md)의 단계와 도입
   조건을 측정한 뒤에 들입니다. 조건을 측정하지 않은 채 앞당겨 넣지 않습니다.
 - **MUST** 기반 스택은 [결정 기록 0016](../../docs/adr/0016-base-stack.md)을 따릅니다. Java 25, Spring Boot 4.1, Gradle, Flyway를 사용하고, 데이터는 Spring Data JPA를 기본으로 접근합니다. 잠금, 대량 반영, 집계처럼 JPA가 어색한 곳은 SQL을 직접 사용할 수 있고, QueryDSL은 첫 동적 조회가 필요한 기능에서 도입합니다.
-- **MUST** 웹 화면 기술은 이 문서에서 정하지 않습니다. 화면이 처음 나오는 기능의 plan에서 정하고 결정 기록으로 남깁니다.
+- **MUST** 웹 화면은 [결정 기록 0017](../../docs/adr/0017-web-stack.md)을 따릅니다. React, Vite, TypeScript로 만든 SPA를 API 서버와 같은 주소에서 서비스합니다.
 
 점검: 이 plan이 Java, Spring Boot, PostgreSQL 밖의 서버 기술을 사용하거나, 결정 기록 0016이 정한 스택과 다른 버전이나 데이터 접근 기술을 쓰거나, 1, 2단계에 모듈을 따로 실행하거나, 도입 조건을
-측정하지 않은 Kafka, Redis, Kubernetes를 넣거나, 웹 화면 기술을 결정 기록 없이 정하는가?
+측정하지 않은 Kafka, Redis, Kubernetes를 넣거나, 결정 기록 0017과 다른 웹 화면 기술을 쓰거나 웹 화면을 API 서버와 다른 주소에 두는가?
 
 ## 개발 흐름
 
@@ -124,4 +124,4 @@ Article VIII(Framework Trust)를 참고했습니다(https://github.com/github/sp
   Complexity Tracking 표에 적습니다. 그 표에 이유가 있는 위반을 `/speckit-analyze`가 CRITICAL로 내면, 저장소 소유자가
   수정할지 예외로 둘지 판단합니다.
 
-**Version**: 1.2.0 | **Ratified**: 2026-11-03 | **Last Amended**: 2026-11-04
+**Version**: 1.3.0 | **Ratified**: 2026-11-03 | **Last Amended**: 2026-11-16
