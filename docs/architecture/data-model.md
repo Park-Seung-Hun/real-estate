@@ -147,7 +147,7 @@ erDiagram
 | 열 | 형식 | 출처 | 저장 방식 |
 |---|---|---|---|
 | `primary_id` | char(36), 기본 키 | Spring Session JDBC 기본 스키마. Spring Session이 만드는 내부 키 | 평문 |
-| `session_id` | char(64), 유니크, 체크 제약 `^[0-9a-f]{64}$` | 결정 기록 0013, 결정 기록 0012 결정 절(세션 토큰은 해시로 저장). 기본 스키마의 `CHAR(36)`을 SHA-256 해시의 소문자 16진수 64자 형식으로 변경한 열입니다. 쿠키의 원문 토큰은 32바이트를 base64url로 인코딩한 43자라 형식이 다릅니다. 그래서 해시 래퍼를 거치지 않고 원문이 저장되면 이 제약에 걸려 저장이 실패하고, 바로 발견됩니다 | 해시 |
+| `session_id` | char(64), 유니크, 체크 제약 `^[0-9a-f]{64}$` | 결정 기록 0013, 결정 기록 0012 결정 절(세션 토큰은 해시로 저장). 기본 스키마의 `CHAR(36)`을 SHA-256 해시의 소문자 16진수 64자 형식으로 변경한 열입니다. 쿠키의 원문 토큰은 32바이트를 base64url로 인코딩한 43자라 형식이 다릅니다. 그래서 해시 변환을 거치지 않고 원문이 저장되면 이 제약에 걸려 저장이 실패하고, 바로 발견됩니다 | 해시 |
 | `creation_time` | bigint | Spring Session JDBC 기본 스키마. 로그인 시각이며 절대 만료 판단에 사용합니다(결정 기록 0013) | 평문 |
 | `last_access_time` | bigint | Spring Session JDBC 기본 스키마. 마지막 요청 시각 | 평문 |
 | `max_inactive_interval` | int | Spring Session JDBC 기본 스키마. 유휴 허용 시간(초)이며 7일입니다(결정 기록 0013) | 평문 |
@@ -160,9 +160,9 @@ erDiagram
 |---|---|---|---|
 | `session_primary_id` | char(36), `spring_session.primary_id` 참조 | Spring Session JDBC 기본 스키마. 세션이 삭제되면 속성도 함께 삭제됩니다 | 평문 |
 | `attribute_name` | varchar(200) | Spring Session JDBC 기본 스키마. 기본 키는 `session_primary_id`와 이 열의 쌍입니다 | 평문 |
-| `attribute_bytes` | bytea | 결정 기록 0013. 로그인 정보를 직렬화한 값입니다. 서비스 사용자 번호와 마지막 인증 시각(ID 토큰의 `auth_time`)만 담고 구글 토큰과 이메일 같은 개인정보는 담지 않습니다 | 평문 |
+| `attribute_bytes` | bytea | 결정 기록 0013. 로그인 정보를 직렬화한 값입니다. 서비스 사용자 번호와 마지막 구글 인증 시각(콜백을 처리한 시각)만 담고 구글 토큰과 이메일 같은 개인정보는 담지 않습니다 | 평문 |
 
-- 세션 방식은 [결정 기록 0013](../adr/0013-session.md)에서 정했습니다. 로그인은 Spring Security로 하고, 세션은 Spring Session JDBC에 저장합니다. 세션 속성에는 사용자 번호와 마지막 인증 시각(ID 토큰의 `auth_time`)만 담은 로그인 정보가 저장되며, 열을 추가하지 않았습니다. 쿠키로 무작위 토큰을 발급하고 `session_id`에는 그 토큰의 SHA-256 해시만 저장합니다.
+- 세션 방식은 [결정 기록 0013](../adr/0013-session.md)에서 정했습니다. 로그인은 Spring Security로 하고, 세션은 Spring Session JDBC에 저장합니다. 세션 속성에는 사용자 번호와 마지막 구글 인증 시각(콜백을 처리한 시각)만 담은 로그인 정보가 저장되며, 열을 추가하지 않았습니다. 쿠키로 무작위 토큰을 발급하고 `session_id`에는 그 토큰의 SHA-256 해시만 저장합니다.
 - 세션은 `user`를 외래 키로 가리키지 않고 `principal_name`에 `user.id`를 문자열로 담습니다. 그래서 사용자 행을 삭제해도 세션은 저절로 삭제되지 않습니다. 탈퇴할 때 같은 `principal_name`의 세션을 모두 삭제합니다([삭제와 보존](#삭제와-보존)).
 - 세션은 7일 동안 요청이 없으면 만료되고, 계속 사용해도 로그인한 지 30일이면 만료됩니다(결정 기록 0013). 7일은 `max_inactive_interval`과 `expiry_time`으로 정하고, 30일은 로그인 시각(`creation_time`)으로 계산합니다. 절대 30일 만료를 어느 열로 적용할지는 구현에서 정하며 열을 추가하지 않았습니다.
 
