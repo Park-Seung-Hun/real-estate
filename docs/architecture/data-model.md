@@ -160,9 +160,9 @@ erDiagram
 |---|---|---|---|
 | `session_primary_id` | char(36), `spring_session.primary_id` 참조 | Spring Session JDBC 기본 스키마. 세션이 삭제되면 속성도 함께 삭제됩니다 | 평문 |
 | `attribute_name` | varchar(200) | Spring Session JDBC 기본 스키마. 기본 키는 `session_primary_id`와 이 열의 쌍입니다 | 평문 |
-| `attribute_bytes` | bytea | 결정 기록 0013. 로그인 정보를 직렬화한 값입니다. 서비스 사용자 번호와 마지막 인증 시각(ID 토큰의 `auth_time`)만 담고 구글 토큰과 이메일 같은 개인정보는 담지 않습니다 | 평문 |
+| `attribute_bytes` | bytea | 결정 기록 0013. 로그인 정보를 직렬화한 값입니다. 서비스 사용자 번호와 마지막 구글 인증 시각(콜백을 처리한 시각)만 담고 구글 토큰과 이메일 같은 개인정보는 담지 않습니다 | 평문 |
 
-- 세션 방식은 [결정 기록 0013](../adr/0013-session.md)에서 정했습니다. 로그인은 Spring Security로 하고, 세션은 Spring Session JDBC에 저장합니다. 세션 속성에는 사용자 번호와 마지막 인증 시각(ID 토큰의 `auth_time`)만 담은 로그인 정보가 저장되며, 열을 추가하지 않았습니다. 쿠키로 무작위 토큰을 발급하고 `session_id`에는 그 토큰의 SHA-256 해시만 저장합니다.
+- 세션 방식은 [결정 기록 0013](../adr/0013-session.md)에서 정했습니다. 로그인은 Spring Security로 하고, 세션은 Spring Session JDBC에 저장합니다. 세션 속성에는 사용자 번호와 마지막 구글 인증 시각(콜백을 처리한 시각)만 담은 로그인 정보가 저장되며, 열을 추가하지 않았습니다. 쿠키로 무작위 토큰을 발급하고 `session_id`에는 그 토큰의 SHA-256 해시만 저장합니다.
 - 세션은 `user`를 외래 키로 가리키지 않고 `principal_name`에 `user.id`를 문자열로 담습니다. 그래서 사용자 행을 삭제해도 세션은 저절로 삭제되지 않습니다. 탈퇴할 때 같은 `principal_name`의 세션을 모두 삭제합니다([삭제와 보존](#삭제와-보존)).
 - 세션은 7일 동안 요청이 없으면 만료되고, 계속 사용해도 로그인한 지 30일이면 만료됩니다(결정 기록 0013). 7일은 `max_inactive_interval`과 `expiry_time`으로 정하고, 30일은 로그인 시각(`creation_time`)으로 계산합니다. 절대 30일 만료를 어느 열로 적용할지는 구현에서 정하며 열을 추가하지 않았습니다.
 
