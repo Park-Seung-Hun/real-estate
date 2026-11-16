@@ -159,7 +159,7 @@
 
 ## Phase 7: Polish
 
-- [ ] T060 [P] 보안 경계 테스트(구현과 다른 쪽이 Phase 3 시작 전에 작성해 두고 여기서 통과시킴) `src/test/java/estate/user/security/PersonalDataLeakSecurityTest.java`: 로그 출력을 캡처한 채 로그인 성공, 로그인 실패, 재인증 실패, 다른 계정 재인증, 롤백, 표시 이름 400, 탈퇴를 실행하고, 출력과 모든 응답 본문에 가짜 이메일, 가짜 `sub`, 쿠키 원문 토큰, ID 토큰 문자열이 없고, 가짜 표시 이름은 내 정보 응답 본문 말고는 출력과 응답 어디에도 없음(FR-020, SC-006)
+- [X] T060 [P] 보안 경계 테스트(구현과 다른 쪽이 Phase 3 시작 전에 작성해 두고 여기서 통과시킴) `src/test/java/estate/user/security/PersonalDataLeakSecurityTest.java`: 로그 출력을 캡처한 채 로그인 성공, 로그인 실패, 재인증 실패, 다른 계정 재인증, 롤백, 표시 이름 400, 탈퇴를 실행하고, 출력과 모든 응답 본문에 가짜 이메일, 가짜 `sub`, 쿠키 원문 토큰, ID 토큰 문자열이 없고, 가짜 표시 이름은 내 정보 응답 본문 말고는 출력과 응답 어디에도 없음(FR-020, SC-006)
 - [ ] T061 Playwright 실행 준비 `web/scripts/e2e.sh`: 테스트 키를 만들고 `compose.yaml`의 `postgres`와 `mock-oauth2`를 띄운 뒤 `e2e` 프로필로 앱 jar를 띄우고 끝나면 정리
 - [ ] T062 Playwright 테스트 `web/tests/e2e/login.spec.ts`: 너비 360px에서 다섯 화면(로그인, 가구 없음, 탈퇴 확인, 로그인 실패, 재인증 실패) 모두 가로 스크롤 없음(FR-021, SC-007), 로그인 화면에서 가짜 구글 로그인을 마치면 추가 입력 없이 가구 없음 화면이고 로그아웃하면 로그인 화면(SC-001, US1-1, US1-8)
 - [ ] T063 전체 테스트를 통과시킨다: `./gradlew test`, `cd web && npm test`, `./gradlew bootJar` 뒤 `cd web && npm run e2e`

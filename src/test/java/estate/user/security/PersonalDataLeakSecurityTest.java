@@ -18,7 +18,6 @@ import estate.support.LoginClient;
 import estate.support.LoginIntegrationTest;
 import estate.support.SessionRows;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.LoggerFactory;
@@ -39,7 +38,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
  * 내 정보 응답(GET /api/v1/me)은 계약상 loginEmail과 displayName을 담으므로 그 둘만 검사에서 뺀다(sub, 토큰은 검사).
  * ID 토큰 문자열을 알려고 모든 로그인을 정상 서명 토큰을 직접 넣는 경로(FakeGoogleServer.forgedIdToken을 바꾸지 않고 build)로 한다.
  */
-@Disabled("마무리 단계에서 켠다: tasks T060")
 @LoginIntegrationTest
 @AutoConfigureMockMvc
 @ExtendWith(OutputCaptureExtension.class)
