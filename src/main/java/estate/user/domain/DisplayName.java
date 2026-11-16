@@ -22,6 +22,21 @@ public final class DisplayName {
         return name.isEmpty() ? Optional.empty() : Optional.of(name);
     }
 
+    /** 사용자가 직접 입력한 이름. 규칙에 맞으면 앞뒤 공백을 지운 값, 어기면 빈 값(호출부가 400으로 응답). */
+    public static Optional<String> fromUser(String input) {
+        // 구글 이름(fromGoogle)과 달리 고쳐 주지 않고 거절만 한다(research R11)
+        if (input == null) {
+            return Optional.empty();
+        }
+        String name = strip(input);
+        // 코드 포인트로 센다: length()는 이모지 하나를 2로 센다
+        long length = name.codePoints().count();
+        if (length == 0 || length > MAX_CODE_POINTS || name.codePoints().anyMatch(DisplayName::isForbidden)) {
+            return Optional.empty();
+        }
+        return Optional.of(name);
+    }
+
     private static boolean isForbidden(int cp) {
         int type = Character.getType(cp);
         return type == Character.CONTROL || type == Character.LINE_SEPARATOR || type == Character.PARAGRAPH_SEPARATOR

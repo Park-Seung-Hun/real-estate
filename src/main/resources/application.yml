@@ -6,6 +6,10 @@ spring:
     hibernate:
       # 스키마는 Flyway만 만들고, Hibernate는 엔티티와 어긋나는지 검증만 한다
       ddl-auto: validate
+  jackson:
+    deserialization:
+      # 알 수 없는 필드를 거절해 PATCH /api/v1/me로 이메일 같은 다른 필드를 보내도 무시되지 않게 한다
+      fail-on-unknown-properties: true
   datasource:
     hikari:
       data-source-properties:

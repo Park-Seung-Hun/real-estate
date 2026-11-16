@@ -20,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
 import org.springframework.web.util.UriComponentsBuilder;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import estate.support.FakeGoogleServer;
@@ -97,6 +98,71 @@ class ErrorResponseLeakTest {
                 .header("Cookie", LoginClient.SESSION_COOKIE + "=" + session));
 
         assertNoEcho(response, "/api/v1/logout", marker);
+    }
+
+    @Test
+    @DisplayName("T057 FR-018 FR-020 실서버: 21자 이름의 PATCH /api/v1/me 는 400 VALIDATION_FAILED, pointer #/displayName, 정한 문구이고 본문에 보낸 이름이 없다")
+    void tooLongDisplayNameOnRealServer() throws Exception {
+        String session = loginOnRealServer();
+        // 코드 포인트 21개: "긴이름" 3자와 고유한 16진수 18자
+        String name = "긴이름" + UUID.randomUUID().toString().replace("-", "").substring(0, 18);
+        assertThat(name.codePointCount(0, name.length())).isEqualTo(21);
+
+        HttpResponse<String> response = patchMe(session, "{\"displayName\":\"" + name + "\"}");
+
+        JsonNode problem = expectProblem(response, 400);
+        assertThat(problem.path("code").asString()).isEqualTo("VALIDATION_FAILED");
+        assertThat(problem.path("errors").path(0).path("pointer").asString()).isEqualTo("#/displayName");
+        assertThat(problem.path("errors").path(0).path("detail").asString()).isEqualTo("표시 이름은 1자 이상 20자 이하로 입력해 주세요.");
+        assertThat(response.body()).as("오류 본문에 보낸 이름이 없어야 한다").doesNotContain(name);
+    }
+
+    @Test
+    @DisplayName("T057 FR-017 FR-020 실서버: 알 수 없는 필드(loginEmail)가 있는 PATCH /api/v1/me 는 400 VALIDATION_FAILED, pointer #, 정한 문구이고 본문에 필드 이름과 값이 없다")
+    void unknownFieldOnRealServer() throws Exception {
+        String session = loginOnRealServer();
+
+        HttpResponse<String> response = patchMe(session, "{\"displayName\":\"이름\",\"loginEmail\":\"leak@example.com\"}");
+
+        JsonNode problem = expectProblem(response, 400);
+        assertThat(problem.path("code").asString()).isEqualTo("VALIDATION_FAILED");
+        assertThat(problem.path("errors").path(0).path("pointer").asString()).isEqualTo("#");
+        assertThat(problem.path("errors").path(0).path("detail").asString()).isEqualTo("알 수 없는 필드가 있습니다.");
+        assertThat(response.body()).doesNotContain("leak@example.com").doesNotContain("loginEmail");
+    }
+
+    @Test
+    @DisplayName("T057 FR-020 실서버: 깨진 JSON의 PATCH /api/v1/me 는 400 problem+json(type about:blank, title Bad Request, code와 errors 없음)이고 본문에 보낸 조각이 없다")
+    void brokenJsonPatchMeOnRealServer() throws Exception {
+        String session = loginOnRealServer();
+        String marker = marker();
+
+        HttpResponse<String> response = patchMe(session, "{\"displayName\":\"" + marker);
+
+        JsonNode problem = expectProblem(response, 400);
+        assertThat(problem.path("type").asString()).isEqualTo("about:blank");
+        assertThat(problem.path("title").asString()).isEqualTo("Bad Request");
+        assertThat(problem.has("code")).as("code가 없어야 한다: " + response.body()).isFalse();
+        assertThat(problem.has("errors")).as("errors가 없어야 한다: " + response.body()).isFalse();
+        assertThat(response.body()).doesNotContain(marker).doesNotContain("displayName");
+    }
+
+    private HttpResponse<String> patchMe(String session, String body) throws Exception {
+        return send(HttpRequest.newBuilder(url("/api/v1/me"))
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json")
+                .header("Origin", ORIGIN)
+                .header("Cookie", LoginClient.SESSION_COOKIE + "=" + session));
+    }
+
+    /** 상태 코드와 application/problem+json 을 확인하고 본문을 JSON으로 읽는다. */
+    private static JsonNode expectProblem(HttpResponse<String> response, int status) {
+        assertThat(response.statusCode()).as("본문: " + response.body()).isEqualTo(status);
+        String contentType = response.headers().firstValue("Content-Type").orElse(null);
+        assertThat(contentType).as("Content-Type이 있어야 한다").isNotNull();
+        assertThat(MediaType.parseMediaType(contentType).isCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .as("오류 본문은 application/problem+json: " + contentType).isTrue();
+        return JSON.readTree(response.body());
     }
 
     /** 본문에 경로와 표식이 없고, 본문이 있으면 application/problem+json 이다. */

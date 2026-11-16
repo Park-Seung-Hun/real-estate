@@ -71,4 +71,8 @@ public class User {
     public void changeEmailVerified(boolean emailVerified) {
         this.emailVerified = emailVerified;
     }
+
+    public void changeDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
 }

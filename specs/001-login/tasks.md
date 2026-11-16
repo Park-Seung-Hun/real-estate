@@ -149,9 +149,9 @@
 
 **Independent Test**: 내 정보를 조회하고, 이름을 수정한 뒤 다시 조회하고, 빈 이름과 21자 이름이 거절되는지 확인합니다.
 
-- [ ] T057 [P] [US4] 보안 경계 테스트(구현과 다른 쪽이 spec과 API 공통 규칙에서 작성) `src/test/java/estate/user/security/MeAccessSecurityTest.java`: 세션 없음과 만료된 세션의 `PATCH /api/v1/me`는 401, 사용자 둘을 두고 B의 세션으로 이름을 수정하면 B만 바뀌고 A는 그대로, `loginEmail`이나 `emailVerified`를 본문에 넣으면 400이고 아무것도 바뀌지 않음, `GET /api/v1/me`는 세션 사용자 자신의 값만 반환(FR-017, FR-018, API 공통 규칙 권한 확인 5단계)
-- [ ] T058 [P] [US4] `src/test/java/estate/user/MeApiTest.java`: 조회에 세 필드(US4-1, FR-017), 새 이름 저장 뒤 조회에 새 이름(US4-2, FR-018), 구글이 이름을 보내지 않은 첫 로그인은 `displayName` null이고 직접 저장 가능(US4-3), 공백만, 21자, 제어 문자, 줄 구분 문자, 방향 제어 문자는 400 `VALIDATION_FAILED`이고 `pointer`가 `#/displayName`, 20자는 200(US4-4), 알 수 없는 필드는 400, 로그인 없이는 401
-- [ ] T059 [US4] 표시 이름 수정 `src/main/java/estate/user/domain/DisplayName.java`, `src/main/java/estate/user/web/MeController.java`(contracts `PATCH /api/v1/me`): 앞뒤 공백을 제거한 뒤 1자 이상 20자 이하(코드 포인트), 제어 문자(Cc), 줄 구분 문자(Zl, Zp), 방향 제어 문자(U+202A~U+202E, U+2066~U+2069) 없음. 세션의 사용자만 고침. `application.yml`에 `spring.jackson.deserialization.fail-on-unknown-properties: true`를 두어 알 수 없는 필드를 400 `VALIDATION_FAILED`로 응답
+- [X] T057 [P] [US4] 보안 경계 테스트(구현과 다른 쪽이 spec과 API 공통 규칙에서 작성) `src/test/java/estate/user/security/MeAccessSecurityTest.java`: 세션 없음과 만료된 세션의 `PATCH /api/v1/me`는 401, 사용자 둘을 두고 B의 세션으로 이름을 수정하면 B만 바뀌고 A는 그대로, `loginEmail`이나 `emailVerified`를 본문에 넣으면 400이고 아무것도 바뀌지 않음, `GET /api/v1/me`는 세션 사용자 자신의 값만 반환(FR-017, FR-018, API 공통 규칙 권한 확인 5단계)
+- [X] T058 [P] [US4] `src/test/java/estate/user/MeApiTest.java`: 조회에 세 필드(US4-1, FR-017), 새 이름 저장 뒤 조회에 새 이름(US4-2, FR-018), 구글이 이름을 보내지 않은 첫 로그인은 `displayName` null이고 직접 저장 가능(US4-3), 공백만, 21자, 제어 문자, 줄 구분 문자, 방향 제어 문자는 400 `VALIDATION_FAILED`이고 `pointer`가 `#/displayName`, 20자는 200(US4-4), 알 수 없는 필드는 400, 로그인 없이는 401
+- [X] T059 [US4] 표시 이름 수정 `src/main/java/estate/user/domain/DisplayName.java`, `src/main/java/estate/user/web/MeController.java`(contracts `PATCH /api/v1/me`): 앞뒤 공백을 제거한 뒤 1자 이상 20자 이하(코드 포인트), 제어 문자(Cc), 줄 구분 문자(Zl, Zp), 방향 제어 문자(U+202A~U+202E, U+2066~U+2069) 없음. 세션의 사용자만 고침. `application.yml`에 `spring.jackson.deserialization.fail-on-unknown-properties: true`를 두어 알 수 없는 필드를 400 `VALIDATION_FAILED`로 응답
 
 **Checkpoint**: 네 사용자 스토리가 모두 동작합니다.
 
