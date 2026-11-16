@@ -78,17 +78,17 @@ src/main/java/estate/
 │   └── web/                     # Problem Details, Origin 검사 필터, 화면 경로 대체, 보안 헤더
 └── user/                        # 사용자와 인증 모듈
     ├── domain/                  # User 엔티티, 표시 이름 규칙
-    ├── application/             # 로그인 처리(사용자 찾기와 만들기), 내 정보, 탈퇴
-    ├── web/                     # 내 정보와 탈퇴 API, 로그인 성공과 실패 처리기
+    ├── application/             # 로그인 처리(사용자 찾기와 만들기), 탈퇴(사용자의 모든 세션 삭제 포함)
+    ├── web/                     # 내 정보 조회와 표시 이름 수정과 탈퇴 API, 로그인 성공과 실패 처리기
     ├── security/                # 보안 설정, 로그인 정보, 절대 만료 필터, 인가 요청 쿠키 저장소, 돌아갈 경로 검사
-    └── session/                 # 세션 ID 생성기, 쿠키 해석기, 세션 삭제(사용자별)
+    └── session/                 # 세션 ID 생성기, 쿠키 해석기
 
 src/main/resources/
 ├── application.yml
 ├── application-local.yml        # 로컬 개발 설정(.env 읽기, 데이터베이스 기본값, 허용 출처)
 ├── application-local-vite.yml   # Vite 개발 서버(5173)를 쓸 때의 허용 출처와 리디렉션 주소
 ├── application-tunnel.yml       # 휴대폰 실기기용 터널(forwarded 헤더, ESTATE_PUBLIC_ORIGIN)
-├── application-e2e.yml          # Playwright용(가짜 구글 서버 주소, 테스트 키)
+├── application-e2e.yml          # Playwright용(가짜 구글 서버 주소, 허용 출처). 테스트 키는 web/scripts/e2e.sh가 환경 변수로 넘김
 └── db/migration/
     └── V1__login.sql            # user, 시퀀스, spring_session 두 테이블
 
