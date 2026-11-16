@@ -44,7 +44,27 @@ public class LoginService {
                     DisplayName.fromGoogle(googleName).orElse(null)));
             return id;
         }
-        User user = found.get();
+        syncEmail(found.get(), email, verified);
+        return found.get().getId();
+    }
+
+    public enum AccountMatch { SAME, DIFFERENT, MISSING }
+
+    /** 재인증의 첫 단계. 사용자 행을 잠그고 sub가 같은지만 본다(아무것도 바꾸지 않는다). */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public AccountMatch lockAndCompare(long userId, String subject) {
+        return users.findByIdForUpdate(userId)
+                .map(user -> user.getProviderSubject().equals(subject) ? AccountMatch.SAME : AccountMatch.DIFFERENT)
+                .orElse(AccountMatch.MISSING);
+    }
+
+    /** 같은 계정으로 재인증이 끝났을 때 이메일과 검증 여부를 맞춘다. 사용자 행은 lockAndCompare가 이미 잠갔다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void refresh(long userId, String email, Boolean emailVerified) {
+        syncEmail(users.findById(userId).orElseThrow(), email, Boolean.TRUE.equals(emailVerified));
+    }
+
+    private void syncEmail(User user, String email, boolean verified) {
         String aad = User.loginEmailAad(user.getId());
         if (!email.equals(cipher.decrypt(user.getLoginEmail(), aad))) {
             user.changeLoginEmail(cipher.encrypt(email, aad));
@@ -52,6 +72,5 @@ public class LoginService {
         if (user.isEmailVerified() != verified) {
             user.changeEmailVerified(verified);
         }
-        return user.getId();
     }
 }

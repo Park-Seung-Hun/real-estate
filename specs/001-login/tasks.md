@@ -102,16 +102,16 @@
 
 ### 보안 경계 테스트 (구현과 다른 쪽이 먼저 작성)
 
-- [ ] T043 [P] [US3] `src/test/java/estate/user/security/WithdrawSessionSecurityTest.java`: 같은 사용자가 두 기기로 로그인한 뒤 한쪽에서 `DELETE /api/v1/me`하면 204, 사용자 행과 그 사용자의 세션 행이 모두 없고, 두 쿠키의 다음 요청이 401, 다른 사용자의 세션은 남음(US3-3, US3-4, FR-016, FR-019, SC-004)
-- [ ] T044 [P] [US3] `src/test/java/estate/user/security/WithdrawConcurrencyTest.java`: 같은 사용자의 탈퇴와 로그인 콜백을 동시에 실행해도 교착 없이 끝나고, 남는 세션은 없거나 새로 만든 사용자 행의 세션뿐. 같은 구글 계정의 처음 로그인 콜백 둘을 동시에 실행하면 사용자 행 하나와 세션 행 둘이 남음(research R5)
+- [X] T043 [P] [US3] `src/test/java/estate/user/security/WithdrawSessionSecurityTest.java`: 같은 사용자가 두 기기로 로그인한 뒤 한쪽에서 `DELETE /api/v1/me`하면 204, 사용자 행과 그 사용자의 세션 행이 모두 없고, 두 쿠키의 다음 요청이 401, 다른 사용자의 세션은 남음(US3-3, US3-4, FR-016, FR-019, SC-004)
+- [X] T044 [P] [US3] `src/test/java/estate/user/security/WithdrawConcurrencyTest.java`: 같은 사용자의 탈퇴와 로그인 콜백을 동시에 실행해도 교착 없이 끝나고, 남는 세션은 없거나 새로 만든 사용자 행의 세션뿐. 같은 구글 계정의 처음 로그인 콜백 둘을 동시에 실행하면 사용자 행 하나와 세션 행 둘이 남음(research R5)
 
 ### 동작 테스트
 
-- [ ] T045 [P] [US3] `src/test/java/estate/user/WithdrawFlowTest.java`: 탈퇴 응답이 세션 쿠키를 삭제하고, 탈퇴한 구글 계정으로 다시 로그인하면 새 번호의 사용자 행이 생기며 구글 이름이 표시 이름(US3-5)
+- [X] T045 [P] [US3] `src/test/java/estate/user/WithdrawFlowTest.java`: 탈퇴 응답이 세션 쿠키를 삭제하고, 탈퇴한 구글 계정으로 다시 로그인하면 새 번호의 사용자 행이 생기며 구글 이름이 표시 이름(US3-5)
 
 ### 구현
 
-- [ ] T046 [US3] 탈퇴 `src/main/java/estate/user/application/WithdrawService.java`, `src/main/java/estate/user/web/MeController.java`(research R9): 한 트랜잭션에서 사용자 행 `FOR UPDATE`, `DELETE FROM spring_session WHERE principal_name = ?`, 사용자 행 삭제, 커밋 뒤 현재 세션 `invalidate()`와 쿠키 삭제, 204
+- [X] T046 [US3] 탈퇴 `src/main/java/estate/user/application/WithdrawService.java`, `src/main/java/estate/user/web/MeController.java`(research R9): 한 트랜잭션에서 사용자 행 `FOR UPDATE`, `DELETE FROM spring_session WHERE principal_name = ?`, 사용자 행 삭제, 커밋 뒤 현재 세션 `invalidate()`와 쿠키 삭제, 204
 - [ ] T047 [US3] 탈퇴 확인 화면 `web/src/pages/WithdrawPage.tsx`(research R13 확정 문구): "탈퇴하면 계정, 로그인 이메일, 표시 이름과 모든 기기의 로그인 상태가 삭제되며 되돌릴 수 없습니다.", "탈퇴", "취소". 취소는 가구 없음 화면, 탈퇴는 `DELETE /api/v1/me` 뒤 로그인 화면
 - [ ] T048 [P] [US3] 화면 테스트 `web/tests/unit/withdraw.test.tsx`: 가구 없음 화면의 탈퇴가 확인 화면을 먼저 보임(US3-1), 취소하면 요청 없이 돌아감(US3-2), 탈퇴하면 로그인 화면(US3-3)
 
@@ -127,14 +127,14 @@
 
 ### 보안 경계 테스트 (구현과 다른 쪽이 먼저 작성)
 
-- [ ] T049 [P] [US2] `src/test/java/estate/user/security/ReauthOrderSecurityTest.java`: `Clock`을 옮겨 마지막 구글 인증 5분 안이면 탈퇴 처리(US2-1), 5분 넘음, 기록 없음, 60초 넘게 미래이면 401 `REAUTH_REQUIRED`이고 사용자와 세션이 그대로(US2-2, FR-011, SC-002), 만료되거나 삭제된 세션은 인증이 오래됐어도 `UNAUTHENTICATED` 401(US2-6, FR-015), 재인증 뒤 5분 안의 두 번째 시도는 재인증 없이 처리(spec Edge Cases)
-- [ ] T050 [P] [US2] `src/test/java/estate/user/security/ReauthAccountMismatchSecurityTest.java`: 재인증에서 다른 `sub`의 계정을 고르면 `/reauth-failed?reason=account-mismatch`, 옛 세션 행 삭제, 새 세션 행과 Set-Cookie 없음, 다른 계정의 사용자 행이 생기거나 바뀌지 않음(US2-4, FR-013, SC-003)
-- [ ] T051 [P] [US2] `src/test/java/estate/user/security/ReauthSessionSecurityTest.java`: 재인증 성공이면 새 세션 행 발급, 옛 세션 행 삭제, 새 세션의 `creation_time`이 재인증 시각(30일을 새로 셈), 마지막 구글 인증 시각이 재인증 시각(US2-5, FR-014). 옛 세션이 없거나 유휴 만료거나 절대 만료면 `/reauth-failed`이고 새 세션 없음(research R5)
+- [X] T049 [P] [US2] `src/test/java/estate/user/security/ReauthOrderSecurityTest.java`: `Clock`을 옮겨 마지막 구글 인증 5분 안이면 탈퇴 처리(US2-1), 5분 넘음, 기록 없음, 60초 넘게 미래이면 401 `REAUTH_REQUIRED`이고 사용자와 세션이 그대로(US2-2, FR-011, SC-002), 만료되거나 삭제된 세션은 인증이 오래됐어도 `UNAUTHENTICATED` 401(US2-6, FR-015), 재인증 뒤 5분 안의 두 번째 시도는 재인증 없이 처리(spec Edge Cases)
+- [X] T050 [P] [US2] `src/test/java/estate/user/security/ReauthAccountMismatchSecurityTest.java`: 재인증에서 다른 `sub`의 계정을 고르면 `/reauth-failed?reason=account-mismatch`, 옛 세션 행 삭제, 새 세션 행과 Set-Cookie 없음, 다른 계정의 사용자 행이 생기거나 바뀌지 않음(US2-4, FR-013, SC-003)
+- [X] T051 [P] [US2] `src/test/java/estate/user/security/ReauthSessionSecurityTest.java`: 재인증 성공이면 새 세션 행 발급, 옛 세션 행 삭제, 새 세션의 `creation_time`이 재인증 시각(30일을 새로 셈), 마지막 구글 인증 시각이 재인증 시각(US2-5, FR-014). 옛 세션이 없거나 유휴 만료거나 절대 만료면 `/reauth-failed`이고 새 세션 없음(research R5)
 
 ### 구현
 
-- [ ] T052 [US2] 재인증 판정 `src/main/java/estate/common/reauth/ReauthJudge.java`(research R8): 마지막 구글 인증 시각이 없거나, `Clock` 현재 시각과 5분 넘게 차이 나거나, 60초 넘게 미래면 401 `REAUTH_REQUIRED`. `WithdrawService`가 잠금과 삭제 전에 호출함
-- [ ] T053 [US2] 재인증 콜백 `src/main/java/estate/user/web/LoginSuccessHandler.java`, `src/main/java/estate/user/application/LoginService.java`(research R5 재인증): 옛 세션 참조의 `principal_name`으로 사용자 행 `FOR UPDATE`, `sub`를 먼저 비교해 다르면 이 트랜잭션은 아무것도 바꾸지 않고 다른 트랜잭션에서 옛 세션 삭제 뒤 `/reauth-failed?reason=account-mismatch`, 옛 세션의 유휴와 절대 만료 확인, 같으면 이메일 갱신과 새 세션 저장과 옛 세션 삭제(삭제한 행이 정확히 하나가 아니면 롤백하고 `/reauth-failed`)
+- [X] T052 [US2] 재인증 판정 `src/main/java/estate/common/reauth/ReauthJudge.java`(research R8): 마지막 구글 인증 시각이 없거나, `Clock` 현재 시각과 5분 넘게 차이 나거나, 60초 넘게 미래면 401 `REAUTH_REQUIRED`. `WithdrawService`가 잠금과 삭제 전에 호출함
+- [X] T053 [US2] 재인증 콜백 `src/main/java/estate/user/web/LoginSuccessHandler.java`, `src/main/java/estate/user/application/LoginService.java`(research R5 재인증): 옛 세션 참조의 `principal_name`으로 사용자 행 `FOR UPDATE`, `sub`를 먼저 비교해 다르면 이 트랜잭션은 아무것도 바꾸지 않고 다른 트랜잭션에서 옛 세션 삭제 뒤 `/reauth-failed?reason=account-mismatch`, 옛 세션의 유휴와 절대 만료 확인, 같으면 이메일 갱신과 새 세션 저장과 옛 세션 삭제(삭제한 행이 정확히 하나가 아니면 롤백하고 `/reauth-failed`)
 - [ ] T054 [P] [US2] 보안 경계 테스트(구현과 다른 쪽이 spec FR-012와 결정 기록 0013에서 작성) `web/tests/unit/reauth-security.test.tsx`: 재인증에서 돌아온 탈퇴 확인 화면이 탈퇴 요청을 자동으로 보내지 않음, 재인증 전후로 `localStorage`, `sessionStorage`, 화면 주소, `returnTo`에 밀린 동작과 입력값이 없음(US2-3, FR-012)
 - [ ] T055 [US2] 재인증 화면 `web/src/pages/WithdrawPage.tsx`, `web/src/pages/ReauthFailedPage.tsx`(research R13 확정 문구): `REAUTH_REQUIRED`면 "탈퇴하려면 구글 계정을 한 번 더 확인해야 합니다."와 "구글 계정 확인"(`/oauth2/authorization/google?purpose=reauth&returnTo=/withdraw`), 재인증 실패 기본 "구글 계정 확인에 실패했습니다. 다시 시도해 주세요.", `reason=account-mismatch`면 "다른 구글 계정을 골라 로그인이 해제되었습니다. 다시 로그인해 주세요."
 - [ ] T056 [P] [US2] 화면 테스트 `web/tests/unit/reauth.test.tsx`: `REAUTH_REQUIRED` 안내와 버튼 주소(US2-2), `/api/v1/me`가 401이어도 `/reauth-failed`는 재인증 실패 문구를 보임, 기본 문구와 `reason=account-mismatch` 문구(US2-4)

@@ -25,7 +25,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class AbsoluteExpiryFilter extends OncePerRequestFilter implements Ordered {
 
-    static final Duration ABSOLUTE_LIFETIME = Duration.ofDays(30);
+    public static final Duration ABSOLUTE_LIFETIME = Duration.ofDays(30);
 
     private static final String CALLBACK_PREFIX = "/login/oauth2/code/";
 
