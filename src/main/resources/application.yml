@@ -6,6 +6,11 @@ spring:
     hibernate:
       # 스키마는 Flyway만 만들고, Hibernate는 엔티티와 어긋나는지 검증만 한다
       ddl-auto: validate
+  datasource:
+    hikari:
+      data-source-properties:
+        # 유니크 위반 같은 서버 오류의 Detail(키 값, 예: 구글 sub)이 예외 메시지와 Hibernate 경고 로그에 실리지 않게 한다
+        logServerErrorDetail: false
   session:
     timeout: 7d
     jdbc:
