@@ -80,6 +80,11 @@ public final class FakeGoogleServer {
         PENDING_TOKEN_RESPONSE.set(null);
     }
 
+    /** 다음 토큰 요청에 쓰일 예약 계정(소비하지 않음). 없으면 null. */
+    public static GoogleAccount peekNext() {
+        return ACCOUNTS.peek();
+    }
+
     /** 예약이 남았는지(테스트가 소비되지 않은 예약을 확인할 때). */
     public static int pendingCount() {
         return ACCOUNTS.size() + (PENDING_TOKEN_RESPONSE.get() != null ? 1 : 0);
@@ -98,13 +103,7 @@ public final class FakeGoogleServer {
                 if (a == null) {
                     throw new IllegalStateException("FakeGoogleServer.willReturn 없이 토큰 요청이 왔다");
                 }
-                Map<String, Object> claims = new HashMap<>();
-                claims.put("email", a.email());
-                claims.put("email_verified", a.emailVerified());
-                if (a.name() != null) {
-                    claims.put("name", a.name());
-                }
-                return new DefaultOAuth2TokenCallback(ISSUER_ID, a.sub(), "JWT", null, claims, 3600L);
+                return new DefaultOAuth2TokenCallback(ISSUER_ID, a.sub(), "JWT", null, a.claims(), 3600L);
             });
         }
 

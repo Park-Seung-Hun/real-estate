@@ -140,20 +140,45 @@ class TestSupportSelfTest {
 
     /** 앱 없이 가짜 서버에만 인가와 토큰 교환을 해서 ID 토큰을 받는다. */
     private String exchangeForIdToken() throws Exception {
-        var http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
-        String redirect = "https://localhost/cb";
         String authorizeUrl = FakeGoogleServer.server().authorizationEndpointUrl(FakeGoogleServer.ISSUER_ID) + "?response_type=code&client_id="
-                + FakeGoogleServer.CLIENT_ID + "&redirect_uri=" + URLEncoder.encode(redirect, StandardCharsets.UTF_8)
+                + FakeGoogleServer.CLIENT_ID + "&redirect_uri=" + URLEncoder.encode("https://localhost/cb", StandardCharsets.UTF_8)
                 + "&state=s&nonce=self-nonce&scope=openid";
-        String location = http.send(HttpRequest.newBuilder(URI.create(authorizeUrl)).build(), HttpResponse.BodyHandlers.discarding())
+        String location = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build()
+                .send(HttpRequest.newBuilder(URI.create(authorizeUrl)).build(), HttpResponse.BodyHandlers.discarding())
                 .headers().firstValue("Location").orElseThrow();
-        String code = location.replaceAll(".*[?&]code=([^&]+).*", "$1");
+        return exchangeCodeForIdToken(location.replaceAll(".*[?&]code=([^&]+).*", "$1"));
+    }
+
+    private String exchangeCodeForIdToken(String code) throws Exception {
         String form = "grant_type=authorization_code&code=" + code + "&client_id=" + FakeGoogleServer.CLIENT_ID
-                + "&redirect_uri=" + URLEncoder.encode(redirect, StandardCharsets.UTF_8);
-        String body = http.send(HttpRequest.newBuilder(FakeGoogleServer.server().tokenEndpointUrl(FakeGoogleServer.ISSUER_ID).uri())
+                + "&redirect_uri=" + URLEncoder.encode("https://localhost/cb", StandardCharsets.UTF_8);
+        String body = HttpClient.newHttpClient().send(HttpRequest.newBuilder(FakeGoogleServer.server().tokenEndpointUrl(FakeGoogleServer.ISSUER_ID).uri())
                 .header("Content-Type", "application/x-www-form-urlencoded").POST(HttpRequest.BodyPublishers.ofString(form)).build(),
                 HttpResponse.BodyHandlers.ofString()).body();
         return body.replaceAll("(?s).*\"id_token\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+    }
+
+    @Test
+    void prompt가_붙은_인가_요청도_authorize가_code와_state를_받고_토큰의_sub는_예약_계정이다() throws Exception {
+        String authorizeUrl = FakeGoogleServer.server().authorizationEndpointUrl(FakeGoogleServer.ISSUER_ID) + "?response_type=code&client_id="
+                + FakeGoogleServer.CLIENT_ID + "&redirect_uri=" + URLEncoder.encode("https://localhost/cb", StandardCharsets.UTF_8)
+                + "&state=s-prompt&nonce=self-nonce&scope=openid&prompt=select_account";
+        MvcResult start = mock(MvcResult.class);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        response.setHeader("Location", authorizeUrl);
+        when(start.getResponse()).thenReturn(response);
+        FakeGoogleServer.willReturn(GoogleAccount.of("self-sub-prompt", "user1@example.com"));
+
+        var authorized = new LoginClient(null).authorize(start);
+
+        assertThat(authorized.get("state")).isEqualTo("s-prompt");
+        assertThat(FakeGoogleServer.pendingCount()).isEqualTo(1);
+        var claims = SignedJWT.parse(exchangeCodeForIdToken(authorized.get("code"))).getJWTClaimsSet();
+        assertThat(claims.getSubject()).isEqualTo("self-sub-prompt");
+        assertThat(claims.getStringClaim("email")).isEqualTo("user1@example.com");
+        assertThat(claims.getStringClaim("name")).isEqualTo("테스트 사용자");
+        assertThat(claims.getClaim("email_verified")).isEqualTo(true);
+        assertThat(claims.getStringClaim("nonce")).isEqualTo("self-nonce");
     }
 
     @Test

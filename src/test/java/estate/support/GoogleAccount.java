@@ -25,4 +25,15 @@ public record GoogleAccount(String sub, String email, boolean emailVerified, Str
     public GoogleAccount withEmailVerified(boolean emailVerified) {
         return new GoogleAccount(sub, email, emailVerified, name);
     }
+
+    /** ID 토큰의 email, email_verified, name claim(이름이 없으면 name 없음). */
+    public java.util.Map<String, Object> claims() {
+        var claims = new java.util.LinkedHashMap<String, Object>();
+        claims.put("email", email);
+        claims.put("email_verified", emailVerified);
+        if (name != null) {
+            claims.put("name", name);
+        }
+        return claims;
+    }
 }

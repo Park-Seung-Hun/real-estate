@@ -1,6 +1,7 @@
 package estate.support;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -52,6 +53,8 @@ public final class LoginClient {
         }
     }
 
+    private static final tools.jackson.databind.ObjectMapper JSON = new tools.jackson.databind.ObjectMapper();
+
     private final MockMvc mockMvc;
     private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
 
@@ -68,14 +71,14 @@ public final class LoginClient {
         FakeGoogleServer.reset();
         FakeGoogleServer.willReturn(account);
         MvcResult start = start(returnTo, purpose, oldSessionCookie);
-        return new Result(start, callback(start, authorize(start)));
+        return new Result(start, callback(start, authorize(start, account)));
     }
 
     /** 잘못된 ID 토큰으로 한 바퀴. nonce를 받아 토큰을 만드는 함수를 준다: {@code n -> forgedIdToken(a, n).audience("x").build()}. */
     public Result loginWithIdToken(GoogleAccount account, Function<String, String> idTokenForNonce) throws Exception {
         FakeGoogleServer.reset();
         MvcResult start = start("/", null, null);
-        Map<String, String> authorized = authorize(start);
+        Map<String, String> authorized = authorize(start, account);
         String nonce = locationParam(start, "nonce");
         FakeGoogleServer.enqueueTokenResponse(account, idTokenForNonce.apply(nonce));
         return new Result(start, callback(start, authorized));
@@ -96,9 +99,24 @@ public final class LoginClient {
         return mockMvc.perform(https(get)).andReturn();
     }
 
-    /** 시작 응답의 Location으로 가짜 서버 인가를 HTTP로 실행하고 돌아온 code와 state를 준다. */
+    /**
+     * 시작 응답의 Location으로 가짜 서버 인가를 HTTP로 실행하고 돌아온 code와 state를 준다. prompt 때문에 뜨는 로그인 폼은 자동으로 넘기며,
+     * 폼에 넣는 계정은 예약 대기열의 맨 앞 계정이다(소비하지 않음, 예약이 없으면 고정 계정). 계정을 직접 정하려면 {@code authorize(start, account)}.
+     */
     public Map<String, String> authorize(MvcResult start) throws Exception {
-        HttpResponse<Void> response = http.send(HttpRequest.newBuilder(URI.create(location(start))).GET().build(),
+        GoogleAccount next = FakeGoogleServer.peekNext();
+        return authorize(start, next != null ? next : GoogleAccount.of("form-login-user", "form-login-user@example.com"));
+    }
+
+    /** prompt 때문에 가짜 서버가 로그인 폼(200)을 주면 이 계정의 sub와 claims로 폼을 보낸다. 폼이 없으면 계정은 쓰이지 않는다. */
+    public Map<String, String> authorize(MvcResult start, GoogleAccount account) throws Exception {
+        HttpResponse<Void> first = http.send(HttpRequest.newBuilder(URI.create(location(start))).GET().build(),
+                HttpResponse.BodyHandlers.discarding());
+        // 가짜 서버는 폼의 username과 claims를 토큰의 sub와 claims로 쓰므로 예약한 계정과 같은 값을 보낸다(예약 대기열은 토큰 요청이 소비한다).
+        HttpResponse<Void> response = first.statusCode() != 200 ? first : http.send(HttpRequest.newBuilder(URI.create(location(start)))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString("username=" + URLEncoder.encode(account.sub(), StandardCharsets.UTF_8)
+                        + "&claims=" + URLEncoder.encode(JSON.writeValueAsString(account.claims()), StandardCharsets.UTF_8))).build(),
                 HttpResponse.BodyHandlers.discarding());
         String back = response.headers().firstValue("Location").orElseThrow(
                 () -> new IllegalStateException("가짜 서버 인가가 리디렉션하지 않음: " + response.statusCode()));

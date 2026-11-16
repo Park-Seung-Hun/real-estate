@@ -21,6 +21,8 @@ import org.springframework.test.context.TestPropertySource;
 @TestPropertySource(properties = {
         "spring.flyway.locations=classpath:db/migration,classpath:db/test-migration",
         "GOOGLE_CLIENT_ID=test-client-id",
-        "GOOGLE_CLIENT_SECRET=test-client-secret"})
+        "GOOGLE_CLIENT_SECRET=test-client-secret",
+        // MockMvc 요청은 https://localhost로 가므로 요청 출처 검사의 허용 출처도 같게 둔다
+        "estate.web.allowed-origins=https://localhost"})
 public @interface IntegrationTest {
 }
