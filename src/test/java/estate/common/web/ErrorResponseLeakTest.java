@@ -16,7 +16,11 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -38,6 +42,7 @@ import estate.support.LoginIntegrationTest;
  */
 @LoginIntegrationTest
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ExtendWith(OutputCaptureExtension.class)
 class ErrorResponseLeakTest {
 
     static final String ORIGIN = "https://localhost";
@@ -132,7 +137,7 @@ class ErrorResponseLeakTest {
     }
 
     @Test
-    @DisplayName("T057 FR-020 실서버: 깨진 JSON의 PATCH /api/v1/me 는 400 problem+json(type about:blank, title Bad Request, code와 errors 없음)이고 본문에 보낸 조각이 없다")
+    @DisplayName("T057 FR-020 계약 Problem.code 필수 실서버: 깨진 JSON의 PATCH /api/v1/me 는 400 VALIDATION_FAILED, pointer #, 읽을 수 없다는 문구이고 본문에 보낸 조각이 없다")
     void brokenJsonPatchMeOnRealServer() throws Exception {
         String session = loginOnRealServer();
         String marker = marker();
@@ -140,11 +145,45 @@ class ErrorResponseLeakTest {
         HttpResponse<String> response = patchMe(session, "{\"displayName\":\"" + marker);
 
         JsonNode problem = expectProblem(response, 400);
-        assertThat(problem.path("type").asString()).isEqualTo("about:blank");
-        assertThat(problem.path("title").asString()).isEqualTo("Bad Request");
-        assertThat(problem.has("code")).as("code가 없어야 한다: " + response.body()).isFalse();
-        assertThat(problem.has("errors")).as("errors가 없어야 한다: " + response.body()).isFalse();
+        assertThat(problem.path("code").asString()).isEqualTo("VALIDATION_FAILED");
+        assertThat(problem.path("detail").asString()).isEqualTo("입력값 하나를 확인해 주세요.");
+        assertThat(problem.path("errors").path(0).path("pointer").asString()).isEqualTo("#");
+        assertThat(problem.path("errors").path(0).path("detail").asString()).isEqualTo("요청 본문을 읽을 수 없습니다.");
         assertThat(response.body()).doesNotContain(marker).doesNotContain("displayName");
+    }
+
+    @Test
+    @DisplayName("FR-020 실서버: 로그인 없이 등록하지 않은 제공자(이메일 모양, github)로 로그인을 시작하면 404 problem+json이고 본문과 서버 출력에 보낸 값이 없다")
+    void unknownLoginProviderOnRealServer(CapturedOutput output) throws Exception {
+        String email = "leak-" + UUID.randomUUID() + "@example.com";
+        for (String provider : new String[] {email, "github"}) {
+            HttpResponse<String> response = send(HttpRequest.newBuilder(url("/oauth2/authorization/" + provider)).GET());
+
+            expectProblem(response, 404);
+            assertThat(response.body()).as("404 본문이 있어야 비반사 검사가 의미 있다").isNotBlank();
+            assertThat(response.body()).as(provider + " 응답 본문").doesNotContain(provider);
+        }
+
+        // 대조: 서버 출력을 캡처가 실제로 잡는다(없음 검사가 빈 캡처로 통과하지 않게)
+        String marker = marker();
+        LoggerFactory.getLogger(ErrorResponseLeakTest.class).warn(marker);
+        String all = output.getAll();
+        assertThat(all).contains(marker);
+        assertThat(all).as("서버 출력").doesNotContain(email).doesNotContain("github");
+    }
+
+    @Test
+    @DisplayName("FR-018 계약 Problem.code 필수 실서버: 본문이 빈 PATCH /api/v1/me 는 400 VALIDATION_FAILED, pointer #, 읽을 수 없다는 문구다")
+    void emptyBodyPatchMeOnRealServer() throws Exception {
+        String session = loginOnRealServer();
+
+        HttpResponse<String> response = patchMe(session, "");
+
+        JsonNode problem = expectProblem(response, 400);
+        assertThat(problem.path("code").asString()).isEqualTo("VALIDATION_FAILED");
+        assertThat(problem.path("detail").asString()).isEqualTo("입력값 하나를 확인해 주세요.");
+        assertThat(problem.path("errors").path(0).path("pointer").asString()).isEqualTo("#");
+        assertThat(problem.path("errors").path(0).path("detail").asString()).isEqualTo("요청 본문을 읽을 수 없습니다.");
     }
 
     private HttpResponse<String> patchMe(String session, String body) throws Exception {

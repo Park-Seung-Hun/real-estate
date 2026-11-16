@@ -160,6 +160,31 @@ class PersonalDataLeakSecurityTest {
         assertNoLeak(output);
     }
 
+    @Test
+    void 등록_없는_로그인_제공자_FR_020(CapturedOutput output) throws Exception {
+        // 경로의 제공자 이름 자리에 넣은 값(이메일 모양, 등록하지 않은 제공자)이 응답이나 로그에 되풀이되면 안 된다
+        String email = "leak-" + UUID.randomUUID() + "@example.com";
+        for (String provider : new String[] {email, "github"}) {
+            secrets.add(provider);
+            MvcResult result = record(mvc.perform(https(MockMvcRequestBuilders.get("/oauth2/authorization/" + provider))).andReturn());
+
+            assertThat(result.getResponse().getStatus()).as(provider + " 응답").isEqualTo(404);
+            String contentType = result.getResponse().getContentType();
+            assertThat(contentType).as(provider + " 응답의 Content-Type").isNotNull();
+            assertThat(MediaType.parseMediaType(contentType).isCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .as("404 본문은 application/problem+json: " + contentType).isTrue();
+            assertThat(result.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                    .as("404 본문이 있어야 비반사 검사가 의미 있다").isNotBlank();
+        }
+
+        // 대조: 등록한 제공자(google)는 지금처럼 구글로 보낸다
+        MvcResult google = record(login.start("/", null, null));
+        assertThat(google.getResponse().getStatus()).isEqualTo(302);
+        assertThat(google.getResponse().getHeader(HttpHeaders.LOCATION)).startsWith(FakeGoogleServer.issuer() + "/");
+
+        assertNoLeak(output);
+    }
+
     /** 정상 로그인 한 바퀴. 이메일, sub, 표시 이름, ID 토큰, 세션 쿠키 원문을 검사 대상에 넣는다. */
     private Cookie loginWithKnownToken(GoogleAccount a) throws Exception {
         MvcResult callback = callbackWithKnownToken(a, record(login.start("/", null, null)), UnaryOperator.identity());
@@ -249,7 +274,11 @@ class PersonalDataLeakSecurityTest {
     }
 
     private static MockHttpServletRequestBuilder api(MockHttpServletRequestBuilder builder, Cookie session) {
-        return builder.cookie(session).header(HttpHeaders.ORIGIN, ORIGIN).secure(true).with(request -> {
+        return https(builder.cookie(session).header(HttpHeaders.ORIGIN, ORIGIN));
+    }
+
+    private static MockHttpServletRequestBuilder https(MockHttpServletRequestBuilder builder) {
+        return builder.secure(true).with(request -> {
             request.setScheme("https");
             request.setServerPort(443);
             return request;

@@ -4,6 +4,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
@@ -19,6 +21,7 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.core.converter.ClaimTypeConverter;
@@ -27,6 +30,8 @@ import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 /** 로그인 시작 요청의 인가 요청과 ID 토큰 검증(결정 기록 0013 ID 토큰 확인 표, research R6). */
 @Configuration(proxyBeanMethods = false)
@@ -39,7 +44,36 @@ public class OidcConfig {
         // Boot 4.1.2 등록 속성에는 PKCE 항목이 없어 해석기에서 켠다. 계정 선택은 일반 로그인과 재인증 모두에 붙인다
         resolver.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce()
                 .andThen(builder -> builder.additionalParameters(params -> params.put("prompt", "select_account"))));
-        return resolver;
+        return unregisteredAsUnresolved(registrations, resolver);
+    }
+
+    /**
+     * 등록 없는 제공자 경로는 null을 돌려 필터가 다음으로 넘기게 한다(404). 기본 해석기는 예외를 던지고 필터가 그 예외의
+     * 메시지(경로의 요청 값)를 WARN과 스택으로 로그에 남기기 때문이다(FR-020).
+     */
+    private static OAuth2AuthorizationRequestResolver unregisteredAsUnresolved(ClientRegistrationRepository registrations,
+            OAuth2AuthorizationRequestResolver delegate) {
+        RequestMatcher matcher = PathPatternRequestMatcher.withDefaults()
+                .matcher(OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI + "/{registrationId}");
+        return new OAuth2AuthorizationRequestResolver() {
+            @Override
+            public OAuth2AuthorizationRequest resolve(HttpServletRequest request) {
+                if (!matcher.matches(request)) {
+                    return null;
+                }
+                // 리디렉션 URI의 action이 "login"이어야 하므로 한 인자 메서드는 기본 해석기의 한 인자 메서드를 부른다
+                return registered(matcher.matcher(request).getVariables().get("registrationId")) ? delegate.resolve(request) : null;
+            }
+
+            @Override
+            public OAuth2AuthorizationRequest resolve(HttpServletRequest request, String clientRegistrationId) {
+                return registered(clientRegistrationId) ? delegate.resolve(request, clientRegistrationId) : null;
+            }
+
+            private boolean registered(String registrationId) {
+                return registrationId != null && registrations.findByRegistrationId(registrationId) != null;
+            }
+        };
     }
 
     @Bean

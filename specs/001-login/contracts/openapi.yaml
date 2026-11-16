@@ -8,6 +8,7 @@ info:
     상태를 바꾸는 요청(POST, PATCH, DELETE)은 Origin 헤더가 서비스 주소와 같아야 합니다. Origin이 없으면 Referer의 출처로 확인하고,
     둘 다 없거나 다르면 403 ORIGIN_REJECTED입니다. 이 검사는 로그인 상태 확인(401) 뒤에 합니다.
     화면 경로(HTML과 정적 파일)는 로그인 없이 받지만 개인 자료가 없고, 자료는 /api/v1 아래로만 받습니다.
+    각 경로에 적지 않은 오류(예: 없는 경로 404, 허용하지 않는 메서드 405, 지원하지 않는 본문 형식 415, 서버 오류 500)는 Problem 형식이지만 code가 없습니다.
 paths:
   /oauth2/authorization/google:
     get:

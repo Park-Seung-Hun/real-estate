@@ -2,7 +2,6 @@ package estate.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -47,6 +46,7 @@ class MeApiTest {
     static final String ORIGIN = "https://localhost";
     private static final String NAME_RULE = "표시 이름은 1자 이상 20자 이하로 입력해 주세요.";
     private static final String UNKNOWN_FIELD = "알 수 없는 필드가 있습니다.";
+    private static final String UNREADABLE_BODY = "요청 본문을 읽을 수 없습니다.";
     private static final tools.jackson.databind.ObjectMapper JSON = new tools.jackson.databind.ObjectMapper();
 
     @Autowired
@@ -219,19 +219,27 @@ class MeApiTest {
     }
 
     @Test
-    @DisplayName("T058 FR-018: 깨진 JSON 본문은 400 application/problem+json(type about:blank, title Bad Request)이고 code와 errors가 없으며 보낸 조각이 본문에 없고 저장값은 그대로다")
-    void malformedJsonIsPlainBadRequest() throws Exception {
+    @DisplayName("T058 FR-018 계약 Problem.code 필수: 깨진 JSON 본문은 400 VALIDATION_FAILED, pointer #, 읽을 수 없다는 문구이고 보낸 조각이 본문에 없고 저장값은 그대로다")
+    void malformedJsonIsValidationFailed() throws Exception {
         Saved saved = loginWithName("malformed");
 
         ResultActions result = sendPatch(saved.cookie(), "{\"displayName\":");
 
-        result.andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.type").value("about:blank"))
-                .andExpect(jsonPath("$.title").value("Bad Request"))
-                .andExpect(jsonPath("$", not(hasKey("code"))))
-                .andExpect(jsonPath("$", not(hasKey("errors"))));
+        expectValidationFailed(result, "#", UNREADABLE_BODY);
         assertThat(responseBody(result)).doesNotContain("displayName");
+        assertThat(storedName(saved.account().sub())).isEqualTo(saved.name());
+    }
+
+    @Test
+    @DisplayName("T058 FR-018 계약 Problem.code 필수: 본문이 빈 PATCH(Content-Type JSON)는 400 VALIDATION_FAILED, pointer #이고 저장값은 그대로다")
+    void emptyBodyIsValidationFailed() throws Exception {
+        Saved saved = loginWithName("empty-body");
+
+        sendPatch(saved.cookie(), "")
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors[0].pointer").value("#"));
         assertThat(storedName(saved.account().sub())).isEqualTo(saved.name());
     }
 

@@ -105,7 +105,7 @@ Spring Security의 `AbstractAuthenticationProcessingFilter`는 성공 처리기�
 
 ## R11. 표시 이름 규칙
 
-- Decision: 앞뒤 공백(유니코드 공백)을 제거한 값이 1자 이상 20자 이하(코드 포인트)이고, 제어 문자(Cc), 줄 구분 문자(Zl, Zp), 방향 제어 문자(U+202A~U+202E, U+2066~U+2069)가 없어야 저장합니다. 어기면 400 `VALIDATION_FAILED`, `errors[0].pointer`는 `#/displayName`입니다. `displayName`이 없거나 null이거나 문자열이 아니어도(숫자, 참거짓, 배열, 객체) 같은 응답입니다. 본문에 알 수 없는 필드가 있으면 400 `VALIDATION_FAILED`, `errors[0].pointer`는 `#`(본문 전체)이고, 필드 이름은 응답에 넣지 않습니다. 깨진 JSON은 그 밖의 읽기 오류와 같은 400(code 없음)입니다.
+- Decision: 앞뒤 공백(유니코드 공백)을 제거한 값이 1자 이상 20자 이하(코드 포인트)이고, 제어 문자(Cc), 줄 구분 문자(Zl, Zp), 방향 제어 문자(U+202A~U+202E, U+2066~U+2069)가 없어야 저장합니다. 어기면 400 `VALIDATION_FAILED`, `errors[0].pointer`는 `#/displayName`입니다. `displayName`이 없거나 null이거나 문자열이 아니어도(숫자, 참거짓, 배열, 객체) 같은 응답입니다. 본문에 알 수 없는 필드가 있으면 400 `VALIDATION_FAILED`, `errors[0].pointer`는 `#`(본문 전체)이고, 필드 이름은 응답에 넣지 않습니다. 깨진 JSON이나 빈 본문도 400 `VALIDATION_FAILED`이고 `errors[0].pointer`는 `#`입니다(계약의 `code` 필수를 지킴).
 - 구글이 보낸 이름은 앞뒤 공백과 위 금지 문자를 제거하고 20자로 자른 값을 사용합니다. 그 결과가 비면(구글이 이름을 보내지 않았거나 금지 문자뿐) 빈 값입니다. 그래서 빈 값은 "첫 로그인에서 다듬은 뒤 사용할 수 있는 이름이 없는 경우"에만 생기고, spec 가정 절도 같은 말로 수정했습니다.
 - Rationale: 가족끼리 부르는 이름이라 20자면 충분하고 휴대폰 목록 한 줄에 들어갑니다. 코드 포인트로 세야 한글과 영문이 같은 기준입니다. 방향 제어 문자는 다른 이름처럼 보이게 꾸미는 데 사용될 수 있습니다. 이모지 결합 문자(ZWJ)는 막지 않습니다.
 - Alternatives considered: 바이트 수 기준(한글이 영문의 세 배로 세어짐), 30자(목록 화면에서 줄이 넘침).
