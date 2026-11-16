@@ -1,0 +1,12 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    # compose.yaml과 같은 로컬 전용 기본값
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/estate}
+    username: ${SPRING_DATASOURCE_USERNAME:estate}
+    password: ${SPRING_DATASOURCE_PASSWORD:estate}
+
+estate:
+  web:
+    allowed-origins: http://localhost:8080

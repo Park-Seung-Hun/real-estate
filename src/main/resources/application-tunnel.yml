@@ -1,0 +1,15 @@
+# 휴대폰 확인용 터널. ESTATE_PUBLIC_ORIGIN은 터널의 https 주소
+server:
+  forward-headers-strategy: framework
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            redirect-uri: ${ESTATE_PUBLIC_ORIGIN}/login/oauth2/code/google
+
+estate:
+  web:
+    allowed-origins: ${ESTATE_PUBLIC_ORIGIN}
