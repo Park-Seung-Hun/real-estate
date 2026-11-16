@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { NoHouseholdPage } from './pages/NoHouseholdPage'
 import { ReauthFailedPage } from './pages/ReauthFailedPage'
 import { RetryPage } from './pages/RetryPage'
+import { WithdrawPage } from './pages/WithdrawPage'
 import './styles/app.css'
 
 type Session = 'loading' | 'anonymous' | 'user' | 'error'
@@ -38,6 +39,15 @@ export function App() {
       (error) => isUnauthenticated(error) && setSession('anonymous'),
     )
 
+  const home =
+    session === 'user' ? (
+      <NoHouseholdPage onLogout={onLogout} />
+    ) : session === 'anonymous' ? (
+      <LoginPage />
+    ) : session === 'error' ? (
+      <RetryPage onRetry={retry} />
+    ) : null
+
   return (
     <BrowserRouter>
       <main className="page">
@@ -45,18 +55,8 @@ export function App() {
           <Route path="/login-failed" element={<LoginFailedPage />} />
           <Route path="/reauth-failed" element={<ReauthFailedPage />} />
           {/* 가구 화면이 생기기 전까지 로그인한 모든 경로는 가구 없음 화면이다. */}
-          <Route
-            path="*"
-            element={
-              session === 'user' ? (
-                <NoHouseholdPage onLogout={onLogout} />
-              ) : session === 'anonymous' ? (
-                <LoginPage />
-              ) : session === 'error' ? (
-                <RetryPage onRetry={retry} />
-              ) : null
-            }
-          />
+          <Route path="/withdraw" element={session === 'user' ? <WithdrawPage onGone={() => setSession('anonymous')} /> : home} />
+          <Route path="*" element={home} />
         </Routes>
       </main>
     </BrowserRouter>

@@ -26,3 +26,9 @@ export const getMe = async (): Promise<Me> => (await request('GET', '/api/v1/me'
 export const logout = async (): Promise<void> => {
   await request('POST', '/api/v1/logout')
 }
+
+export const withdraw = async (): Promise<void> => {
+  await request('DELETE', '/api/v1/me')
+}
+
+export const isReauthRequired = (error: unknown) => error instanceof ApiError && error.code === 'REAUTH_REQUIRED'

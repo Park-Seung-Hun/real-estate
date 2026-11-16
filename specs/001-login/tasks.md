@@ -112,8 +112,8 @@
 ### 구현
 
 - [X] T046 [US3] 탈퇴 `src/main/java/estate/user/application/WithdrawService.java`, `src/main/java/estate/user/web/MeController.java`(research R9): 한 트랜잭션에서 사용자 행 `FOR UPDATE`, `DELETE FROM spring_session WHERE principal_name = ?`, 사용자 행 삭제, 커밋 뒤 현재 세션 `invalidate()`와 쿠키 삭제, 204
-- [ ] T047 [US3] 탈퇴 확인 화면 `web/src/pages/WithdrawPage.tsx`(research R13 확정 문구): "탈퇴하면 계정, 로그인 이메일, 표시 이름과 모든 기기의 로그인 상태가 삭제되며 되돌릴 수 없습니다.", "탈퇴", "취소". 취소는 가구 없음 화면, 탈퇴는 `DELETE /api/v1/me` 뒤 로그인 화면
-- [ ] T048 [P] [US3] 화면 테스트 `web/tests/unit/withdraw.test.tsx`: 가구 없음 화면의 탈퇴가 확인 화면을 먼저 보임(US3-1), 취소하면 요청 없이 돌아감(US3-2), 탈퇴하면 로그인 화면(US3-3)
+- [X] T047 [US3] 탈퇴 확인 화면 `web/src/pages/WithdrawPage.tsx`(research R13 확정 문구): "탈퇴하면 계정, 로그인 이메일, 표시 이름과 모든 기기의 로그인 상태가 삭제되며 되돌릴 수 없습니다.", "탈퇴", "취소". 취소는 가구 없음 화면, 탈퇴는 `DELETE /api/v1/me` 뒤 로그인 화면
+- [X] T048 [P] [US3] 화면 테스트 `web/tests/unit/withdraw.test.tsx`: 가구 없음 화면의 탈퇴가 확인 화면을 먼저 보임(US3-1), 취소하면 요청 없이 돌아감(US3-2), 탈퇴하면 로그인 화면(US3-3)
 
 **Checkpoint**: 탈퇴가 동작합니다. 아직 재인증이 없으므로 이 상태로 머지하지 않습니다.
 
@@ -135,9 +135,9 @@
 
 - [X] T052 [US2] 재인증 판정 `src/main/java/estate/common/reauth/ReauthJudge.java`(research R8): 마지막 구글 인증 시각이 없거나, `Clock` 현재 시각과 5분 넘게 차이 나거나, 60초 넘게 미래면 401 `REAUTH_REQUIRED`. `WithdrawService`가 잠금과 삭제 전에 호출함
 - [X] T053 [US2] 재인증 콜백 `src/main/java/estate/user/web/LoginSuccessHandler.java`, `src/main/java/estate/user/application/LoginService.java`(research R5 재인증): 옛 세션 참조의 `principal_name`으로 사용자 행 `FOR UPDATE`, `sub`를 먼저 비교해 다르면 이 트랜잭션은 아무것도 바꾸지 않고 다른 트랜잭션에서 옛 세션 삭제 뒤 `/reauth-failed?reason=account-mismatch`, 옛 세션의 유휴와 절대 만료 확인, 같으면 이메일 갱신과 새 세션 저장과 옛 세션 삭제(삭제한 행이 정확히 하나가 아니면 롤백하고 `/reauth-failed`)
-- [ ] T054 [P] [US2] 보안 경계 테스트(구현과 다른 쪽이 spec FR-012와 결정 기록 0013에서 작성) `web/tests/unit/reauth-security.test.tsx`: 재인증에서 돌아온 탈퇴 확인 화면이 탈퇴 요청을 자동으로 보내지 않음, 재인증 전후로 `localStorage`, `sessionStorage`, 화면 주소, `returnTo`에 밀린 동작과 입력값이 없음(US2-3, FR-012)
-- [ ] T055 [US2] 재인증 화면 `web/src/pages/WithdrawPage.tsx`, `web/src/pages/ReauthFailedPage.tsx`(research R13 확정 문구): `REAUTH_REQUIRED`면 "탈퇴하려면 구글 계정을 한 번 더 확인해야 합니다."와 "구글 계정 확인"(`/oauth2/authorization/google?purpose=reauth&returnTo=/withdraw`), 재인증 실패 기본 "구글 계정 확인에 실패했습니다. 다시 시도해 주세요.", `reason=account-mismatch`면 "다른 구글 계정을 골라 로그인이 해제되었습니다. 다시 로그인해 주세요."
-- [ ] T056 [P] [US2] 화면 테스트 `web/tests/unit/reauth.test.tsx`: `REAUTH_REQUIRED` 안내와 버튼 주소(US2-2), `/api/v1/me`가 401이어도 `/reauth-failed`는 재인증 실패 문구를 보임, 기본 문구와 `reason=account-mismatch` 문구(US2-4)
+- [X] T054 [P] [US2] 보안 경계 테스트(구현과 다른 쪽이 spec FR-012와 결정 기록 0013에서 작성) `web/tests/unit/reauth-security.test.tsx`: 재인증에서 돌아온 탈퇴 확인 화면이 탈퇴 요청을 자동으로 보내지 않음, 재인증 전후로 `localStorage`, `sessionStorage`, 화면 주소, `returnTo`에 밀린 동작과 입력값이 없음(US2-3, FR-012)
+- [X] T055 [US2] 재인증 화면 `web/src/pages/WithdrawPage.tsx`, `web/src/pages/ReauthFailedPage.tsx`(research R13 확정 문구): `REAUTH_REQUIRED`면 "탈퇴하려면 구글 계정을 한 번 더 확인해야 합니다."와 "구글 계정 확인"(`/oauth2/authorization/google?purpose=reauth&returnTo=/withdraw`), 재인증 실패 기본 "구글 계정 확인에 실패했습니다. 다시 시도해 주세요.", `reason=account-mismatch`면 "다른 구글 계정을 골라 로그인이 해제되었습니다. 다시 로그인해 주세요."
+- [X] T056 [P] [US2] 화면 테스트 `web/tests/unit/reauth.test.tsx`: `REAUTH_REQUIRED` 안내와 버튼 주소(US2-2), `/api/v1/me`가 401이어도 `/reauth-failed`는 재인증 실패 문구를 보임, 기본 문구와 `reason=account-mismatch` 문구(US2-4)
 
 **Checkpoint**: 탈퇴가 재인증을 거칩니다. 여기까지가 머지 가능한 최소 범위입니다.
 
