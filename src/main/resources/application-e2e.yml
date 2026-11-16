@@ -11,3 +11,5 @@ estate:
   oidc:
     allowed-issuers:
       - http://localhost:9090/google
+  web:
+    allowed-origins: http://localhost:8081
