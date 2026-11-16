@@ -1,3 +1,4 @@
 import { createRoot } from 'react-dom/client'
+import { App } from './App'
 
-createRoot(document.getElementById('root')!).render(<p>준비 중</p>)
+createRoot(document.getElementById('root')!).render(<App />)
