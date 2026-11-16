@@ -4,7 +4,8 @@ import { isReauthRequired, isUnauthenticated, withdraw } from '../api/client'
 
 export function WithdrawPage({ onGone }: { onGone: () => void }) {
   const navigate = useNavigate()
-  const [needsReauth, setNeedsReauth] = useState(false)
+  // 마지막 응답의 안내만 보인다(research R13)
+  const [notice, setNotice] = useState<'reauth' | 'retry' | null>(null)
   const sending = useRef(false)
 
   const onWithdraw = () => {
@@ -20,7 +21,7 @@ export function WithdrawPage({ onGone }: { onGone: () => void }) {
         if (isUnauthenticated(error)) {
           onGone()
           navigate('/')
-        } else if (isReauthRequired(error)) setNeedsReauth(true)
+        } else setNotice(isReauthRequired(error) ? 'reauth' : 'retry')
       },
     )
   }
@@ -28,7 +29,8 @@ export function WithdrawPage({ onGone }: { onGone: () => void }) {
   return (
     <>
       <p>탈퇴하면 계정, 로그인 이메일, 표시 이름과 모든 기기의 로그인 상태가 삭제되며 되돌릴 수 없습니다.</p>
-      {needsReauth && (
+      {notice === 'retry' && <p>잠시 후 다시 시도해 주세요.</p>}
+      {notice === 'reauth' && (
         <>
           <p>탈퇴하려면 구글 계정을 한 번 더 확인해야 합니다.</p>
           <a className="button" href="/oauth2/authorization/google?purpose=reauth&returnTo=/withdraw">
