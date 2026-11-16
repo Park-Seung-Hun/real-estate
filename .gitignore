@@ -14,6 +14,9 @@ build/
 out/
 .gradle/
 node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
 
 # 편집기와 운영체제
 .idea/

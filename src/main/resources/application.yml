@@ -6,3 +6,31 @@ spring:
     hibernate:
       # 스키마는 Flyway만 만들고, Hibernate는 엔티티와 어긋나는지 검증만 한다
       ddl-auto: validate
+  jackson:
+    deserialization:
+      # 알 수 없는 필드를 거절해 PATCH /api/v1/me로 이메일 같은 다른 필드를 보내도 무시되지 않게 한다
+      fail-on-unknown-properties: true
+  datasource:
+    hikari:
+      data-source-properties:
+        # 유니크 위반 같은 서버 오류의 Detail(키 값, 예: 구글 sub)이 예외 메시지와 Hibernate 경고 로그에 실리지 않게 한다
+        logServerErrorDetail: false
+  session:
+    timeout: 7d
+    jdbc:
+      # 테이블은 Flyway가 만든다
+      initialize-schema: never
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: openid, email, profile
+
+estate:
+  oidc:
+    allowed-issuers:
+      - https://accounts.google.com
+      - accounts.google.com

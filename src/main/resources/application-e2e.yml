@@ -1,0 +1,15 @@
+# Playwright용. compose.yaml의 가짜 구글 서버(호스트 9090)를 가리킨다
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          google:
+            issuer-uri: http://localhost:9090/google
+
+estate:
+  oidc:
+    allowed-issuers:
+      - http://localhost:9090/google
+  web:
+    allowed-origins: http://localhost:8081

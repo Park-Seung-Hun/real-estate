@@ -1,0 +1,12 @@
+# local과 함께 켜서 Vite 개발 서버(5173) 출처로 덮는다
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            redirect-uri: http://localhost:5173/login/oauth2/code/google
+
+estate:
+  web:
+    allowed-origins: http://localhost:5173
