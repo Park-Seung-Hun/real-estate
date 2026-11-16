@@ -62,7 +62,7 @@ Spring Security의 `AbstractAuthenticationProcessingFilter`는 성공 처리기�
 ## R6. 로그인 시작, 임시 값 쿠키, ID 토큰 검증
 
 - Decision:
-  - 로그인 시작 요청은 `GET /oauth2/authorization/google`이고 질의 값 `returnTo`(돌아갈 경로)와 `purpose=reauth`를 받습니다. 인가 요청 해석기(`DefaultOAuth2AuthorizationRequestResolver`)의 사용자 지정으로 모든 요청에 `prompt=select_account`를 붙이고, PKCE는 클라이언트 등록의 `requireProofKey=true`로 활성화합니다. 요청 캐시는 끕니다.
+  - 로그인 시작 요청은 `GET /oauth2/authorization/google`이고 질의 값 `returnTo`(돌아갈 경로)와 `purpose=reauth`를 받습니다. 인가 요청 해석기(`DefaultOAuth2AuthorizationRequestResolver`)의 사용자 지정으로 모든 요청에 `prompt=select_account`를 붙이고, PKCE(S256)는 해석기에 `OAuth2AuthorizationRequestCustomizers.withPkce()`를 더해 켭니다(Boot 4.1.2의 클라이언트 등록 속성에는 PKCE 항목이 없어 설정 파일로 켤 수 없음). 요청 캐시는 끕니다.
   - `AuthorizationRequestRepository`를 직접 구현해 인가 요청(state, nonce, PKCE 검증값, 리디렉션 주소)과 돌아갈 경로, 시작 시각, 옛 세션 참조, 목적을 JSON으로 묶어 `__Host-Http-login` 쿠키(10분, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`)에 AES-GCM으로 감쌉니다(키는 R10의 쿠키 키, AAD는 쿠키 이름). 옛 세션 참조와 목적은 세션 쿠키가 있을 때만 담습니다. 콜백은 state를 비교하고 시작 시각이 10분 안인지 확인한 뒤 쿠키를 삭제합니다.
   - 돌아갈 경로 검사: 서블릿이 질의 값을 한 번 푼 값(`getParameter`)이 결정 기록 0013의 세 조건을 지키고, 그 값에 `%`가 없고, 출력 가능한 ASCII만 있을 때만 받습니다. 그 밖은 `/`입니다. 그래서 퍼센트 인코딩을 다시 푼 값과 Location에 쓰는 값이 늘 같습니다. 001의 화면 경로는 ASCII뿐입니다.
   - ID 토큰 검증: 서명 알고리즘은 RS256만 받도록 `OidcIdTokenDecoderFactory`의 알고리즘 해석기를 고정합니다. `iss`는 설정값 `estate.oidc.allowed-issuers`(운영은 `https://accounts.google.com`과 `accounts.google.com`, 테스트는 가짜 서버 주소)에 있는 값만 받도록 검증기를 바꿉니다. Spring의 기본 검증은 등록된 issuer 하나만 비교하기 때문입니다. `aud`, `exp`, `nonce`는 Spring 기본 검증을 사용합니다. `auth_time`은 확인하지 않습니다(결정 기록 0013).
