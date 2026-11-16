@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +32,7 @@ import estate.support.FakeGoogleServer;
 import estate.support.GoogleAccount;
 import estate.support.LoginClient;
 import estate.support.LoginIntegrationTest;
+import estate.support.MutableClock;
 import estate.support.SessionRows;
 
 /**
@@ -46,6 +48,8 @@ class SessionExpirySecurityTest {
     MockMvc mvc;
     @Autowired
     SessionRows sessions;
+    @Autowired
+    MutableClock clock;
     LoginClient login;
 
     @BeforeEach
@@ -67,6 +71,22 @@ class SessionExpirySecurityTest {
         Cookie cookie = loggedInShiftedBack(Duration.ofDays(29), Duration.ofDays(1));
 
         mvc.perform(https(get("/api/v1/me")).cookie(cookie)).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("T021 FR-008 결정 기록 0013 경계: 로그인한 지 정확히 30일(마지막 요청 어제)인 세션은 아직 지나지 않았으므로 200")
+    void exactlyThirtyDaysIs200() throws Exception {
+        Cookie cookie = loggedInWithClockAfterLogin(Duration.ofDays(30));
+
+        mvc.perform(https(get("/api/v1/me")).cookie(cookie)).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("T021 FR-008 결정 기록 0013 경계: 로그인한 지 30일 1초(마지막 요청 어제)인 세션은 /api/v1/me 401")
+    void thirtyDaysAndOneSecondIs401() throws Exception {
+        Cookie cookie = loggedInWithClockAfterLogin(Duration.ofDays(30).plusSeconds(1));
+
+        expectUnauthenticated(cookie);
     }
 
     @Test
@@ -170,6 +190,20 @@ class SessionExpirySecurityTest {
         assertThat(cookie).as("로그인 콜백이 세션 쿠키를 발급해야 한다").isNotNull();
         int moved = sessions.shiftBackBySessionId(SessionRows.idOfCookie(cookie.getValue()), sinceLogin, sinceLastRequest, sinceLastRequest);
         assertThat(moved).isEqualTo(1);
+        return cookie;
+    }
+
+    /**
+     * 로그인한 뒤 creation_time을 30일, last_access_time과 expiry_time을 1일 과거로 옮기고, 우리 필터가 읽는 Clock을
+     * (옮긴 creation_time + sinceLogin)에 멈춘다. 행의 밀리초 값에서 바로 계산하므로 요청 사이에 흐른 시간이 경과에 섞이지 않는다.
+     * 유휴 만료는 Spring Session이 시스템 시각으로 보므로 last_access를 어제로 두어 걸리지 않게 한다(research R8).
+     */
+    private Cookie loggedInWithClockAfterLogin(Duration sinceLogin) throws Exception {
+        Cookie cookie = login.login(account()).requireSessionCookie();
+        String id = SessionRows.idOfCookie(cookie.getValue());
+        assertThat(sessions.shiftBackBySessionId(id, Duration.ofDays(30), Duration.ofDays(1), Duration.ofDays(1))).isEqualTo(1);
+        Instant created = Instant.ofEpochMilli(sessions.rowOf(id).creationTime());
+        clock.freezeAt(created.plus(sinceLogin));
         return cookie;
     }
 

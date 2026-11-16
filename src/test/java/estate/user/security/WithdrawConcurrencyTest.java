@@ -75,9 +75,12 @@ class WithdrawConcurrencyTest {
         pool = Executors.newFixedThreadPool(2);
     }
 
+    /** 시간 초과나 검증 실패로 끝나도 남은 요청이 다음 테스트의 DB 초기화(Reset)와 겹치지 않게 끝날 때까지 기다린다. */
     @AfterEach
-    void tearDown() {
+    void tearDown() throws InterruptedException {
         pool.shutdownNow();
+        assertThat(pool.awaitTermination(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                .as("남은 요청 스레드가 " + TIMEOUT_SECONDS + "초 안에 끝나지 않았다").isTrue();
     }
 
     @Test
