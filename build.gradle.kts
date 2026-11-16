@@ -41,3 +41,36 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+val webDir = layout.projectDirectory.dir("web")
+val skipWeb = providers.gradleProperty("skipWeb").isPresent
+
+val npmCi = tasks.register<Exec>("npmCi") {
+    workingDir = webDir.asFile
+    commandLine("npm", "ci")
+    inputs.files(webDir.file("package.json"), webDir.file("package-lock.json"))
+    outputs.dir(webDir.dir("node_modules"))
+    onlyIf { !skipWeb }
+}
+
+val npmBuild = tasks.register<Exec>("npmBuild") {
+    dependsOn(npmCi)
+    workingDir = webDir.asFile
+    commandLine("npm", "run", "build")
+    inputs.dir(webDir.dir("src"))
+    inputs.files(
+        webDir.file("index.html"),
+        webDir.file("package.json"),
+        webDir.file("package-lock.json"),
+        webDir.file("vite.config.ts"),
+    )
+    // tsc --noEmit이 tests와 다른 설정 파일까지 검사하고, public은 dist로 복사된다
+    inputs.files(fileTree(webDir) { include("tsconfig*.json", "*.config.ts", "tests/**", "public/**") })
+    outputs.dir(webDir.dir("dist"))
+    onlyIf { !skipWeb }
+}
+
+tasks.processResources {
+    dependsOn(npmBuild)
+    from(webDir.dir("dist")) { into("static") }
+}
