@@ -9,14 +9,14 @@
 | JDK | 25 | `java -version` |
 | Docker | 실행 중 | `docker version` |
 | Node | 24 LTS 이상 | `node -v` |
-| 브라우저 | Chrome(`http://localhost`에서 `__Host-` 쿠키를 받는 것을 확인함). Safari는 쓰지 않습니다 | |
+| 브라우저 | Chrome(`http://localhost`에서 `__Host-` 쿠키를 받는 것을 확인함). Safari는 사용하지 않습니다 | |
 | 구글 OAuth 클라이언트 | 웹 애플리케이션, 리디렉션 주소 `http://localhost:8080/login/oauth2/code/google`, 확인할 구글 계정이 테스트 사용자에 있음 | 구글 클라우드 콘솔 |
 
 다른 계정으로 한 재인증을 확인하려면 테스트 사용자에 구글 계정이 둘 있어야 합니다.
 
 ## 처음 한 번
 
-1. 저장소 루트의 `.env`에 아래 항목을 더합니다. `.env`가 없으면 `.env.example`을 복사해 만듭니다. 이미 있는 항목(공공데이터 키 등)은 그대로 둡니다. `.env`는 저장소에 올라가지 않고(gitignore), 앱은 `spring.config.import`로 이 파일을 읽습니다.
+1. 저장소 루트의 `.env`에 아래 항목을 추가합니다. `.env`가 없으면 `.env.example`을 복사해 만듭니다. 이미 있는 항목(공공데이터 키 등)은 그대로 둡니다. `.env`는 저장소에 올라가지 않고(gitignore), 앱은 `spring.config.import`로 이 파일을 읽습니다.
 
    | 항목 | 넣을 값 |
    |---|---|
@@ -30,7 +30,7 @@
    openssl rand -base64 32
    ```
 
-   데이터베이스 접속 값은 `application-local.yml`에 `compose.yaml`과 같은 기본값이 있어 넣지 않아도 됩니다. 키를 바꾸면 이미 저장한 로그인 이메일을 읽지 못하므로, 로컬에서 키를 바꿨다면 `docker compose down -v`로 데이터베이스를 지우고 다시 시작합니다.
+   데이터베이스 접속 값은 `application-local.yml`에 `compose.yaml`과 같은 기본값이 있어 넣지 않아도 됩니다. 키를 바꾸면 이미 저장한 로그인 이메일을 읽지 못하므로, 로컬에서 키를 바꿨다면 `docker compose down -v`로 데이터베이스를 삭제하고 다시 시작합니다.
 
 2. 로컬 데이터베이스를 띄웁니다. 데이터는 Docker 볼륨에 남습니다.
 
@@ -46,9 +46,9 @@
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-Chrome에서 `http://localhost:8080`을 열고 개발자 도구의 기기 화면(Toggle device toolbar)을 켜 너비를 360px로 둡니다.
+Chrome에서 `http://localhost:8080`을 열고 개발자 도구의 기기 화면(Toggle device toolbar)을 활성화해 너비를 360px로 둡니다.
 
-웹 화면을 고치며 볼 때만 Vite 개발 서버를 씁니다. 구글 콘솔에 리디렉션 주소 `http://localhost:5173/login/oauth2/code/google`을 추가로 등록한 뒤, 터미널 둘에서 각각 실행하고 `http://localhost:5173`을 엽니다.
+웹 화면을 수정하며 볼 때만 Vite 개발 서버를 사용합니다. 구글 콘솔에 리디렉션 주소 `http://localhost:5173/login/oauth2/code/google`을 추가로 등록한 뒤, 터미널 둘에서 각각 실행하고 `http://localhost:5173`을 엽니다.
 
 ```bash
 ./gradlew bootRun -PskipWeb --args='--spring.profiles.active=local,local-vite'
@@ -94,7 +94,7 @@ cd web && npm ci && npm run dev
 
 ### 표시 이름 (사용자 스토리 4)
 
-001에는 표시 이름 화면이 없습니다(002가 만듦). 로그인한 Chrome 탭의 개발자 도구 콘솔에서 요청을 보냅니다. 세션 쿠키와 Origin이 브라우저에서 자동으로 붙습니다.
+001에는 표시 이름 화면이 없습니다(002가 만듦). 로그인한 Chrome 탭의 개발자 도구 콘솔에서 요청을 보냅니다. 세션 쿠키와 Origin이 브라우저에서 자동으로 전송됩니다.
 
 ```js
 const save = (name) => fetch('/api/v1/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: name }) }).then(async r => [r.status, await r.json()])
@@ -112,13 +112,13 @@ const save = (name) => fetch('/api/v1/me', { method: 'PATCH', headers: { 'Conten
 자동 테스트는 가짜 구글 서버로 하므로 아래 둘은 실제 구글 계정으로만 확인할 수 있습니다. 결정 기록 0013의 재인증이 이 동작에 기댑니다.
 
 - 구글에 계정 하나만 로그인된 브라우저에서도 로그인과 재인증 모두 계정 선택 화면이 뜨는가(로그인 4번, 재인증 4번).
-- 다른 계정으로 한 재인증이 실패하고 로그인 상태가 지워지는가(재인증 7번).
+- 다른 계정으로 한 재인증이 실패하고 로그인 상태가 삭제되는가(재인증 7번).
 
 계정 선택 화면이 뜨지 않으면 결정 기록 0013을 재검토해야 하므로 바로 알려 주세요. 로그와 오류에 이메일과 토큰 원문이 없는지는 자동 테스트가 확인하고, 보완으로 위 확인을 마친 뒤 서버 출력에서 내 구글 이메일 주소를 검색해 봅니다.
 
 ## 휴대폰 실기기로 보기(선택)
 
-같은 와이파이의 휴대폰에서 `http://192.168.x.x:8080`으로는 로그인할 수 없습니다. 브라우저가 사설 주소의 http에서 Secure 쿠키를 받지 않고, 구글이 사설 IP를 리디렉션 주소로 받지 않습니다. cloudflared 임시 터널로 HTTPS 주소를 받아 씁니다. 터널 주소는 실행할 때마다 바뀝니다.
+같은 와이파이의 휴대폰에서 `http://192.168.x.x:8080`으로는 로그인할 수 없습니다. 브라우저가 사설 주소의 http에서 Secure 쿠키를 받지 않고, 구글이 사설 IP를 리디렉션 주소로 받지 않습니다. cloudflared 임시 터널로 HTTPS 주소를 받아 사용합니다. 터널 주소는 실행할 때마다 바뀝니다.
 
 1. cloudflared를 설치하고 터널을 엽니다. 출력의 `https://<임의 이름>.trycloudflare.com` 주소를 적어 둡니다.
 
@@ -137,7 +137,7 @@ const save = (name) => fetch('/api/v1/me', { method: 'PATCH', headers: { 'Conten
    ESTATE_PUBLIC_ORIGIN=https://<임의 이름>.trycloudflare.com ./gradlew bootRun --args='--spring.profiles.active=local,tunnel'
    ```
 
-4. 휴대폰 브라우저에서 터널 주소를 열고 위 확인 순서를 따릅니다. 끝나면 터널을 닫고 구글 콘솔에서 그 리디렉션 주소를 지웁니다.
+4. 휴대폰 브라우저에서 터널 주소를 열고 위 확인 순서를 따릅니다. 끝나면 터널을 닫고 구글 콘솔에서 그 리디렉션 주소를 삭제합니다.
 
 ## 자동 테스트
 

@@ -40,7 +40,7 @@ paths:
     get:
       summary: 콜백 요청
       description: >
-        구글에서 돌아오는 최상위 이동입니다. state와 시작 시각(10분)과 ID 토큰을 확인하고 임시 값 쿠키를 지웁니다.
+        구글에서 돌아오는 최상위 이동입니다. state와 시작 시각(10분)과 ID 토큰을 확인하고 임시 값 쿠키를 삭제합니다.
         성공하면 새 세션을 발급하고(__Host-Http-session) 돌아갈 경로로 보냅니다.
         재인증은 ID 토큰의 sub가 옛 세션의 사용자와 같고 옛 세션이 유효할 때만 성공합니다.
       security: []
@@ -96,7 +96,7 @@ paths:
               $ref: "#/components/schemas/UpdateMe"
       responses:
         "200":
-          description: 고친 뒤의 내 정보입니다.
+          description: 수정한 뒤의 내 정보입니다.
           content:
             application/json:
               schema:
@@ -123,7 +123,7 @@ paths:
     delete:
       summary: 탈퇴
       description: >
-        사용자 행을 잠근 뒤 그 사용자의 모든 세션 행과 사용자 행을 한 트랜잭션에서 지웁니다.
+        사용자 행을 잠근 뒤 그 사용자의 모든 세션 행과 사용자 행을 한 트랜잭션에서 삭제합니다.
         로그인 상태 확인(401)을 재인증 확인(401 REAUTH_REQUIRED)보다 먼저 합니다.
         멤버십이 있으면 409로 거절하는 규칙은 002가 붙입니다.
       security:
@@ -134,7 +134,7 @@ paths:
       x-reauth: true
       responses:
         "204":
-          description: 탈퇴했습니다. 세션 쿠키를 지웁니다.
+          description: 탈퇴했습니다. 세션 쿠키를 삭제합니다.
         "401":
           description: 로그인 상태가 없거나(UNAUTHENTICATED) 마지막 구글 인증이 5분보다 오래됐습니다(REAUTH_REQUIRED).
           content:
@@ -161,7 +161,7 @@ paths:
   /api/v1/logout:
     post:
       summary: 로그아웃
-      description: 로그인 상태를 확인한 뒤 이 기기의 세션 행만 지우고 세션 쿠키를 지웁니다. GET으로는 로그아웃하지 않습니다.
+      description: 로그인 상태를 확인한 뒤 이 기기의 세션 행만 삭제하고 세션 쿠키를 삭제합니다. GET으로는 로그아웃하지 않습니다.
       security:
         - sessionCookie: []
       x-permission: none
@@ -188,7 +188,7 @@ components:
       properties:
         displayName:
           type: [string, "null"]
-          description: 첫 로그인에서 구글이 보낸 이름을 다듬은 뒤 쓸 수 있는 이름이 없으면 null입니다.
+          description: 첫 로그인에서 구글이 보낸 이름을 다듬은 뒤 사용할 수 있는 이름이 없으면 null입니다.
           examples: ["엄마"]
         loginEmail:
           type: string
@@ -203,7 +203,7 @@ components:
       properties:
         displayName:
           type: string
-          description: 앞뒤 공백을 지운 뒤 1자 이상 20자 이하(코드 포인트), 제어 문자, 줄 구분 문자, 방향 제어 문자(U+202A~U+202E, U+2066~U+2069) 없음.
+          description: 앞뒤 공백을 제거한 뒤 1자 이상 20자 이하(코드 포인트), 제어 문자, 줄 구분 문자, 방향 제어 문자(U+202A~U+202E, U+2066~U+2069) 없음.
           examples: ["아빠"]
     Problem:
       type: object
