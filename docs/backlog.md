@@ -28,6 +28,7 @@ flowchart LR
   f008["008 사진"]
   f009["009 거래 알림"]
   f010["010 방문 알림"]
+  f011["011 성능과 여러 대 실행 개선"]
 
   f001 -->|"가구 만들기와 초대가 로그인 위에 섬"| f002
   f002 -->|"관심 단지와 매물이 가구에 속함"| f004
@@ -40,11 +41,13 @@ flowchart LR
   f003 -->|"거래 알림은 거래 이력을 판정함"| f009
   f004 -->|"알림 대상이 관심 단지에서 나옴"| f009
   f009 -->|"방문 알림이 알림 기반을 사용함"| f010
+  f010 -->|"모든 기능이 있어야 실제 사용 흐름으로 잼"| f011
 ```
 
 - 006과 007은 서로 의존하지 않습니다. 008까지 만들면 알림 없이도 실제 임장에 사용할 수 있습니다.
 - 009는 거래 이력(003)과 관심 단지(004)가 모두 있어야 알림 대상을 판정할 수 있습니다. 010은 방문 일정과 관심 단지(004)와 009가 만든 알림 기반(스케줄러, 발송 기록, 메일 어댑터, 알림 설정 화면)이 있어야 합니다.
 - 003은 002를 기다리지 않습니다. 단지와 거래는 가구와 무관한 수집 자료입니다.
+- 011은 새 화면을 만드는 기능이 아니라, 010까지 만든 서비스를 측정하고 고치는 작업입니다. 대상은 [개선 후보](improvement-candidates.md)의 항목이고, SpecKit으로 할지 `chore/*` 브랜치로 할지는 시작할 때 정합니다.
 
 ## 백로그
 
@@ -60,6 +63,7 @@ flowchart LR
 | 008 | 사진 | 가구 구성원은 자기 임장 기록에 사진을 올리고 임장 기록의 사진을 보며, 사진은 암호화해 보관하고, 기록이나 매물이나 가구를 삭제하면 사진 파일도 삭제하며, 삭제하지 못해 남은 파일은 하루 한 번의 대조로 정리합니다. | [PRD 기능 범위](prd.md#기능-범위), [결정 기록 0012](adr/0012-personal-data-storage.md), [결정 기록 0014](adr/0014-file-storage.md), [데이터 모델: 매물과 기록](architecture/data-model.md#매물과-기록), [핵심 흐름: 임장 기록과 사진](architecture/flows.md#임장-기록과-사진), [와이어프레임: 임장 기록 작성](design/wireframes.md#임장-기록-작성), [와이어프레임: 매물 상세](design/wireframes.md#매물-상세호가-이력과-실거래-비교)(사진) | 대기 | [#9](https://github.com/Park-Seung-Hun/real-estate/issues/9) |
 | 009 | 거래 알림 | 가구 구성원은 관심 단지에 새 거래나 해제가 수집되면 메일로 거래 알림을 받고, 알림 설정에서 거래 알림을 각자 켜고 끄고, 알림 메일의 링크로 들어오면 화면 이동 규칙에 따라 해당 화면이 열리며, 서비스는 이메일이 검증되지 않은 사람에게 알림을 보내지 않고 안내하며, 같은 알림은 같은 사람에게 한 번만 보내도록 발송 기록으로 막되(메일을 보낸 직후 `sent_at`을 기록하기 전에 중단되면 한 번 더 갈 수 있습니다) 보내지 못한 알림은 재발송합니다. 알림 판정, 스케줄러, 발송 기록, 메일 어댑터, 알림 설정은 이 기능이 처음 만듭니다(방문 알림은 다루지 않습니다). | [PRD 기능 범위](prd.md#기능-범위), [PRD 비기능 요구사항](prd.md#비기능-요구사항), [결정 기록 0003](adr/0003-notification-channel.md), [결정 기록 0010](adr/0010-login-method.md), [결정 기록 0012](adr/0012-personal-data-storage.md), [데이터 모델: 알림](architecture/data-model.md#알림), [C4 컴포넌트: 알림 발송기](architecture/c4-component.md#알림-발송기), [핵심 흐름: 알림 판정과 발송](architecture/flows.md#알림-판정과-발송), [핵심 흐름: 알림 발송기 테스트](architecture/flows.md#알림-발송기), [와이어프레임: 알림 설정](design/wireframes.md#알림-설정), [와이어프레임: 화면 이동](design/wireframes.md#화면-이동) | 대기 | [#6](https://github.com/Park-Seung-Hun/real-estate/issues/6) |
 | 010 | 방문 알림 | 가구 구성원은 방문 일시 전 사람마다 고른 시점(3시간, 하루, 이틀 전, 기본 하루)에 메일로 방문 알림을 받고, 알림 설정에서 방문 알림을 각자 켜고 끄고 시점을 고릅니다. 009가 만든 알림 기반 위에 방문 알림의 판정과 설정 항목을 더합니다. | [PRD 기능 범위](prd.md#기능-범위), [결정 기록 0003](adr/0003-notification-channel.md), [결정 기록 0012](adr/0012-personal-data-storage.md), [데이터 모델: 알림](architecture/data-model.md#알림), [C4 컴포넌트: 알림 발송기](architecture/c4-component.md#알림-발송기), [핵심 흐름: 알림 판정과 발송](architecture/flows.md#알림-판정과-발송), [핵심 흐름: 알림 발송기 테스트](architecture/flows.md#알림-발송기), [와이어프레임: 알림 설정](design/wireframes.md#알림-설정), [와이어프레임: 화면 이동](design/wireframes.md#화면-이동) | 대기 | [#10](https://github.com/Park-Seung-Hun/real-estate/issues/10) |
+| 011 | 성능과 여러 대 실행 개선 | 010까지 머지한 서비스로 부하 실험을 해 세션 쿼리와 화면 응답 시간을 재고, 개선 후보 문서의 항목 가운데 고칠 것을 정해 고치며, API 서버를 두 대로 실행해도 로그인, 재인증, 탈퇴, 표시 이름 수정이 그대로 동작하는지 확인합니다(새 화면과 새 기능은 다루지 않습니다). | [개선 후보](improvement-candidates.md), [결정 기록 0004](adr/0004-staged-adoption.md), [결정 기록 0013](adr/0013-session.md), [C4 컨테이너: 1단계 구성](architecture/c4-container.md#1단계-구성) | 대기 | [#11](https://github.com/Park-Seung-Hun/real-estate/issues/11) |
 
 - 브랜치와 `specs/` 폴더 이름은 `NNN-기능이름`이고 둘이 같습니다. 기능 이름은 영문 kebab-case로 적습니다. 정한 이름은 `001-login`, `002-household-sharing`, `003-trade-collection`, `004-interest-listings`, `005-map-location`, `006-asking-price-compare`, `007-visit-log`, `008-visit-photos`, `009-trade-alerts`, `010-visit-alerts`입니다.
 - 기능의 `contracts/`는 [API 공통 규칙](architecture/api-conventions.md)을 따릅니다. 기능의 `data-model.md`는 설계 문서의 [데이터 모델](architecture/data-model.md)을 참조하고 그 기능의 테이블만 적습니다(2026-10-20 결정).
