@@ -387,6 +387,75 @@ class HouseholdConcurrencySecurityTest {
         assertThat(householdIds()).as("롤백된 연결의 가구 행은 남지 않는다").doesNotContain(lockHousehold);
     }
 
+    @Test
+    @DisplayName("T049 B6 US3 R3 R9: 가구 행 잠금 뒤에 member의 나가기가 먼저, owner의 그 member 제거가 다음에 줄 서면 나가기는 204, 제거는 404 NOT_FOUND이고 owner 멤버십만 남는다")
+    void leaveFirstThenRemoveIsNotFound() throws Exception {
+        Households households = new Households(mvc, jdbc, sessions);
+        long household = households.createHousehold(person);
+        Person member = households.addMember(person);
+
+        Future<MvcResult> leave;
+        Future<MvcResult> remove;
+        try (HouseholdLock lock = HouseholdLock.holding(dataSource, household)) {
+            leave = submit(() -> leave(member).andReturn());
+            lock.awaitWaiting(1);
+            remove = submit(() -> remove(member).andReturn());
+            lock.awaitWaiting(2);
+            assertThat(leave.isDone()).isFalse();
+            assertThat(remove.isDone()).isFalse();
+
+            lock.commit();
+        }
+        MvcResult left = leave.get(10, TimeUnit.SECONDS);
+        MvcResult removed = remove.get(10, TimeUnit.SECONDS);
+
+        status().isNoContent().match(left);
+        expectProblem(removed, 404, "NOT_FOUND");
+        assertThat(membershipRows(household)).containsExactly(person.userId() + "|owner");
+    }
+
+    @Test
+    @DisplayName("T049 B6 US3 R3 R9: 가구 행 잠금 뒤에 owner의 member 제거가 먼저, 그 member의 나가기가 다음에 줄 서면 제거는 204, 나가기는 403 NO_HOUSEHOLD이고 owner 멤버십만 남는다")
+    void removeFirstThenLeaveIsNoHousehold() throws Exception {
+        Households households = new Households(mvc, jdbc, sessions);
+        long household = households.createHousehold(person);
+        Person member = households.addMember(person);
+
+        Future<MvcResult> remove;
+        Future<MvcResult> leave;
+        try (HouseholdLock lock = HouseholdLock.holding(dataSource, household)) {
+            remove = submit(() -> remove(member).andReturn());
+            lock.awaitWaiting(1);
+            leave = submit(() -> leave(member).andReturn());
+            lock.awaitWaiting(2);
+            assertThat(remove.isDone()).isFalse();
+            assertThat(leave.isDone()).isFalse();
+
+            lock.commit();
+        }
+        MvcResult removed = remove.get(10, TimeUnit.SECONDS);
+        MvcResult left = leave.get(10, TimeUnit.SECONDS);
+
+        status().isNoContent().match(removed);
+        expectProblem(left, 403, "NO_HOUSEHOLD");
+        assertThat(membershipRows(household)).containsExactly(person.userId() + "|owner");
+    }
+
+    private ResultActions leave(Person member) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household/membership")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(member.cookie()));
+    }
+
+    /** owner(person)가 보낸다. 로그인 직후라 재인증 판정(5분)을 통과한다. */
+    private ResultActions remove(Person member) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household/members/" + member.userId())).header(HttpHeaders.ORIGIN, ORIGIN)
+                .cookie(person.cookie()));
+    }
+
+    private List<String> membershipRows(long household) {
+        return jdbc.sql("select user_id || '|' || role from household_member where household_id = :h order by user_id")
+                .param("h", household).query(String.class).list();
+    }
+
     private ResultActions accept(Person joiner, String token) throws Exception {
         return mvc.perform(https(post("/api/v1/invitations/accept")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(joiner.cookie())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"token\": \"" + token + "\"}"));

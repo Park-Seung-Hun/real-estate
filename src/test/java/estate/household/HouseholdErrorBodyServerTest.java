@@ -1,6 +1,7 @@
 package estate.household;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
@@ -9,6 +10,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 import jakarta.servlet.http.Cookie;
 
@@ -204,6 +207,49 @@ class HouseholdErrorBodyServerTest {
             assertSameBody(session, path, body, 400, BODY_UNREADABLE);
         }
         assertThat(jdbcCount("invitation")).as("거절된 요청은 초대를 만들지 않는다").isZero();
+    }
+
+    @Test
+    @DisplayName("T056 US3-12 FR-024 실서버: 다른 가구 구성원, 없는 번호, 숫자가 아닌 값의 구성원 제거 404 본문 셋이 글자까지 같고 계약 예시, MockMvc 본문과 같다")
+    void removeNotFoundOnRealServer() throws Exception {
+        String ownerA = server.login();
+        String ownerB = server.login();
+        assertThat(create(ownerA).statusCode()).isEqualTo(201);
+        assertThat(create(ownerB).statusCode()).isEqualTo(201);
+        // 어느 사용자에도 없는 번호: 시퀀스가 지금까지 준 값보다 크다
+        long unused = jdbc.sql("select last_value from user_id_seq").query(Long.class).single() + 1000;
+
+        List<String> bodies = new ArrayList<>();
+        for (String id : new String[] {String.valueOf(userIdOf(ownerB)), String.valueOf(unused), "abc"}) {
+            String path = "/api/v1/household/members/" + id;
+            HttpResponse<String> response = sendJson("DELETE", ownerA, path, null);
+            JsonNode real = expectExactProblem(response, 404, NOT_FOUND);
+            bodies.add(response.body());
+            MvcResult mock = mvc.perform(https(delete(path)).header(HttpHeaders.ORIGIN, ORIGIN).cookie(cookie(ownerA))).andReturn();
+            assertThat(mock.getResponse().getStatus()).as(path).isEqualTo(404);
+            assertThat(JSON.readTree(mock.getResponse().getContentAsString(StandardCharsets.UTF_8))).as("MockMvc 본문과 같다").isEqualTo(real);
+        }
+        assertThat(bodies).as("다른 가구 구성원과 없는 구성원의 본문이 글자까지 같다").containsOnly(bodies.getFirst());
+        assertThat(jdbcCount("household_member")).as("가구 B의 멤버십이 그대로").isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("T056 US3-3 FR-019 실서버: 제거된 사람이 같은 세션 쿠키로 보낸 다음 GET /api/v1/household는 403 NO_HOUSEHOLD이고 계약 예시, MockMvc 본문과 같다")
+    void removedMemberBodyOnRealServer() throws Exception {
+        String owner = server.login();
+        assertThat(create(owner).statusCode()).isEqualTo(201);
+        String joiner = server.login();
+        assertThat(postToken(joiner, "/api/v1/invitations/accept", issue(owner).path("token").stringValue()).statusCode()).isEqualTo(204);
+        long joinerId = userIdOf(joiner);
+
+        assertThat(sendJson("DELETE", owner, "/api/v1/household/members/" + joinerId, null).statusCode()).isEqualTo(204);
+
+        HttpResponse<String> response = server.send(HttpRequest.newBuilder(server.url("/api/v1/household")).GET()
+                .header("Cookie", LoginClient.SESSION_COOKIE + "=" + joiner));
+        JsonNode real = expectExactProblem(response, 403, NO_HOUSEHOLD);
+        MvcResult mock = mvc.perform(https(get("/api/v1/household")).cookie(cookie(joiner))).andReturn();
+        assertThat(mock.getResponse().getStatus()).isEqualTo(403);
+        assertThat(JSON.readTree(mock.getResponse().getContentAsString(StandardCharsets.UTF_8))).as("MockMvc 본문과 같다").isEqualTo(real);
     }
 
     private void assertSameRejection(String session, String path, String token, String expectedJson) throws Exception {

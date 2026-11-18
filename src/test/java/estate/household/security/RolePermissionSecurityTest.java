@@ -76,6 +76,60 @@ class RolePermissionSecurityTest {
         revoke(world.ownerA(), pending).andExpect(status().isNoContent());
     }
 
+    @Test
+    @DisplayName("T053 B11 US3-8 FR-025: member의 구성원 제거(인증 5분 안)는 403 PERMISSION_DENIED이고 멤버십이 그대로이며, 같은 가구 owner의 제거는 204")
+    void memberCannotRemove() throws Exception {
+        Instant authAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        clock.freezeAt(authAt);
+        Households.World world = new Households(mvc, jdbc, sessions).world();
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(1)));
+        String before = memberships();
+
+        expectExactProblem(remove(world.memberA(), world.ownerA()), 403, PERMISSION_DENIED);
+
+        assertThat(memberships()).as("멤버십이 그대로(가구 A의 owner와 member)").isEqualTo(before)
+                .contains(world.householdA() + "|" + world.ownerA().userId() + "|owner")
+                .contains(world.householdA() + "|" + world.memberA().userId() + "|member");
+
+        // 짝: 같은 가구 owner는 권한 단계를 통과해 member를 제거한다
+        remove(world.ownerA(), world.memberA()).andExpect(status().isNoContent());
+        assertThat(memberships()).doesNotContain("|" + world.memberA().userId() + "|");
+    }
+
+    @Test
+    @DisplayName("T053 B11 US3-7 FR-025: owner의 가구 나가기는 403 PERMISSION_DENIED이고 멤버십이 그대로이며, 같은 가구 member의 나가기는 204")
+    void ownerCannotLeave() throws Exception {
+        Households.World world = new Households(mvc, jdbc, sessions).world();
+        String before = memberships();
+
+        expectExactProblem(leave(world.ownerA()), 403, PERMISSION_DENIED);
+
+        assertThat(memberships()).as("멤버십이 그대로(가구 A의 owner와 member)").isEqualTo(before)
+                .contains(world.householdA() + "|" + world.ownerA().userId() + "|owner")
+                .contains(world.householdA() + "|" + world.memberA().userId() + "|member");
+
+        // 짝: 같은 가구 member는 권한 단계를 통과해 나간다
+        leave(world.memberA()).andExpect(status().isNoContent());
+        assertThat(memberships()).doesNotContain("|" + world.memberA().userId() + "|")
+                .contains(world.householdA() + "|" + world.ownerA().userId() + "|owner");
+    }
+
+    private ResultActions remove(Person person, Person target) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household/members/" + target.userId())).header(HttpHeaders.ORIGIN, ORIGIN)
+                .cookie(person.cookie()));
+    }
+
+    private ResultActions leave(Person person) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household/membership")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(person.cookie()));
+    }
+
+    /** 모든 멤버십 행(가구, 사용자 번호, 역할, 들어온 시각). */
+    private String memberships() {
+        return String.join(",", jdbc.sql("""
+                select household_id || '|' || user_id || '|' || role || '|' || joined_at
+                from household_member order by household_id, user_id""").query(String.class).list());
+    }
+
     private ResultActions issue(Person person) throws Exception {
         return mvc.perform(https(post("/api/v1/household/invitations")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(person.cookie())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"expiresInDays\": 3}"));

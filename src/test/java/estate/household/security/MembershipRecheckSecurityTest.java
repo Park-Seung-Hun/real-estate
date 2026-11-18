@@ -1,8 +1,10 @@
 package estate.household.security;
 
+import static estate.household.security.AccessInterceptorSecurityTest.ORIGIN;
 import static estate.household.security.AccessInterceptorSecurityTest.expectProblem;
 import static estate.household.security.AccessInterceptorSecurityTest.https;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -20,6 +23,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import estate.household.domain.HouseholdRole;
 import estate.support.Households;
 import estate.support.Households.Person;
+import estate.support.Households.World;
 import estate.support.LoginIntegrationTest;
 import estate.support.SessionRows;
 
@@ -87,6 +91,39 @@ class MembershipRecheckSecurityTest {
         expectProblem(mvc.perform(getAs("/api/test-only/member-key", member)), 403, "PERMISSION_DENIED");
     }
 
+    @Test
+    @DisplayName("T051 B4 US3-3 FR-019 SC-004: owner가 member를 제거하면 그 사람이 같은 쿠키로 보낸 다음 GET /api/v1/household가 403 NO_HOUSEHOLD이고 세션 행이 남는다")
+    void removedMemberIsRejectedOnNextRequest() throws Exception {
+        World world = new Households(mvc, jdbc, sessions).world();
+        mvc.perform(getAs("/api/v1/household", world.memberA())).andExpect(status().isOk());
+
+        mvc.perform(deleteAs("/api/v1/household/members/" + world.memberA().userId(), world.ownerA()))
+                .andExpect(status().isNoContent());
+
+        expectNoHouseholdWithSession(world.memberA());
+        mvc.perform(getAs("/api/v1/household", world.ownerA())).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("T051 B4 US3-3 US3-6 FR-019 SC-004: member가 가구를 나가면 같은 쿠키로 보낸 다음 GET /api/v1/household가 403 NO_HOUSEHOLD이고 세션 행이 남는다")
+    void leftMemberIsRejectedOnNextRequest() throws Exception {
+        World world = new Households(mvc, jdbc, sessions).world();
+        mvc.perform(getAs("/api/v1/household", world.memberA())).andExpect(status().isOk());
+
+        mvc.perform(deleteAs("/api/v1/household/membership", world.memberA())).andExpect(status().isNoContent());
+
+        expectNoHouseholdWithSession(world.memberA());
+        mvc.perform(getAs("/api/v1/household", world.ownerA())).andExpect(status().isOk());
+    }
+
+    /** 같은 쿠키의 다음 가구 요청이 401이 아니라 403 NO_HOUSEHOLD이고, 그 쿠키의 세션 행이 그 사람의 것으로 남아 있다. */
+    private void expectNoHouseholdWithSession(Person person) throws Exception {
+        String sessionId = SessionRows.idOfCookie(person.cookie().getValue());
+        expectProblem(mvc.perform(getAs("/api/v1/household", person)), 403, "NO_HOUSEHOLD");
+        assertThat(sessions.exists(sessionId)).as("세션 행은 남는다").isTrue();
+        assertThat(sessions.rowOf(sessionId).principalName()).isEqualTo(Long.toString(person.userId()));
+    }
+
     private void insertMember(Person person, HouseholdRole role) {
         jdbc.sql("insert into household_member (household_id, user_id, role, joined_at) values (:h, :u, :role, now())")
                 .param("h", household).param("u", person.userId()).param("role", role.dbValue()).update();
@@ -94,5 +131,9 @@ class MembershipRecheckSecurityTest {
 
     private static MockHttpServletRequestBuilder getAs(String path, Person person) {
         return https(get(path)).cookie(person.cookie());
+    }
+
+    private static MockHttpServletRequestBuilder deleteAs(String path, Person person) {
+        return https(delete(path)).header(HttpHeaders.ORIGIN, ORIGIN).cookie(person.cookie());
     }
 }

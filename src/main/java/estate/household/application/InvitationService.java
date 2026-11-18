@@ -76,16 +76,7 @@ public class InvitationService {
     /** 다른 가구의 초대와 없는 초대는 같은 404다(FR-024). 행은 지우지 않고 상태만 바꾼다. */
     @Transactional
     public void revoke(long householdId, String invitationId) {
-        // 경로 값을 예외 메시지에 넣지 않는다
-        long id;
-        try {
-            id = invitationId.matches("[0-9]{1,19}") ? Long.parseLong(invitationId) : -1;
-        } catch (NumberFormatException e) {
-            id = -1;
-        }
-        if (id < 0) {
-            throw new ProblemException(ProblemCode.NOT_FOUND);
-        }
+        long id = PathIds.parse(invitationId);
         lock(householdId);
         Invitation invitation = invitations.findByHouseholdIdAndId(householdId, id)
                 .orElseThrow(() -> new ProblemException(ProblemCode.NOT_FOUND));

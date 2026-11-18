@@ -124,6 +124,73 @@ class HouseholdReauthSecurityTest {
                 .isEqualTo("취소");
     }
 
+    @Test
+    @DisplayName("T050 B3 FR-022 SC-005: 마지막 구글 인증이 정확히 5분 전이면 구성원 제거가 204이고 member의 멤버십만 없어진다(경계는 허용 쪽)")
+    void exactlyFiveMinutesRemoves() throws Exception {
+        Person member = households.addMember(owner);
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(5)));
+
+        remove(member).andExpect(status().isNoContent());
+
+        assertThat(memberships()).isEqualTo(owner.userId() + "|owner");
+    }
+
+    @Test
+    @DisplayName("T050 B3 FR-022 SC-005: 마지막 구글 인증이 5분 1초 전이면 구성원 제거가 401 REAUTH_REQUIRED이고 멤버십이 그대로다")
+    void fiveMinutesOneSecondRemoveIsReauth() throws Exception {
+        Person member = households.addMember(owner);
+        String before = memberships();
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(5)).plusSeconds(1));
+
+        expectExactProblem(remove(member), 401, REAUTH_REQUIRED);
+        assertThat(memberships()).isEqualTo(before).contains(member.userId() + "|member");
+
+        // 짝: 같은 세션이 5분 안으로 돌아오면 같은 요청이 204
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(4)));
+        remove(member).andExpect(status().isNoContent());
+        assertThat(memberships()).isEqualTo(owner.userId() + "|owner");
+    }
+
+    @Test
+    @DisplayName("T050 B3 FR-022: 마지막 구글 인증이 현재 시각보다 61초 미래면 구성원 제거가 401 REAUTH_REQUIRED이고 멤버십이 그대로다")
+    void sixtyOneSecondsInFutureRemoveIsReauth() throws Exception {
+        Person member = households.addMember(owner);
+        String before = memberships();
+        clock.freezeAt(authAt.minusSeconds(61));
+
+        expectExactProblem(remove(member), 401, REAUTH_REQUIRED);
+
+        assertThat(memberships()).isEqualTo(before).contains(member.userId() + "|member");
+    }
+
+    @Test
+    @DisplayName("T050 B3 FR-018: 가구 나가기는 재인증 대상이 아니라 마지막 구글 인증이 한 시간 전이어도 204이고 그 member의 멤버십만 없어진다")
+    void staleAuthStillLeaves() throws Exception {
+        Person member = households.addMember(owner);
+        String before = memberships();
+        clock.freezeAt(authAt.plus(Duration.ofHours(1)));
+        // 이 시각에 인증이 실제로 오래되었음을 owner의 구성원 제거로 확인한다(멤버십은 그대로)
+        expectExactProblem(remove(member), 401, REAUTH_REQUIRED);
+        assertThat(memberships()).isEqualTo(before);
+
+        mvc.perform(https(delete("/api/v1/household/membership")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(member.cookie()))
+                .andExpect(status().isNoContent());
+
+        assertThat(memberships()).isEqualTo(owner.userId() + "|owner");
+    }
+
+    /** owner가 이 사람을 구성원 제거로 요청한다. */
+    private ResultActions remove(Person target) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household/members/" + target.userId())).header(HttpHeaders.ORIGIN, ORIGIN)
+                .cookie(owner.cookie()));
+    }
+
+    /** 모든 멤버십 행(사용자 번호, 역할). 가구는 setUp의 하나뿐이다. */
+    private String memberships() {
+        return String.join(",", jdbc.sql("select user_id || '|' || role from household_member order by user_id")
+                .query(String.class).list());
+    }
+
     private ResultActions issue() throws Exception {
         return mvc.perform(https(post("/api/v1/household/invitations")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(owner.cookie())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"expiresInDays\": 3}"));

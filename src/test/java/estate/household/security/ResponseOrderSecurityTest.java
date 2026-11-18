@@ -286,6 +286,105 @@ class ResponseOrderSecurityTest {
         }
     }
 
+    @Test
+    @DisplayName("T049 B2 US3-11 SC-007: 모든 인증이 오래되면 member 발급 403, 다른 가구 owner 제거 404, 자기 가구 member 제거 401 REAUTH_REQUIRED이고 멤버십과 초대가 그대로다")
+    void us3ElevenFirstFailingStepWins() throws Exception {
+        Instant authAt = frozenNow();
+        Households.World world = households.world();
+        households.invite(world.ownerB(), 3);
+        String beforeInvitations = invitations();
+        String beforeMembers = memberships();
+        assertThat(beforeInvitations).as("가구 B에 수락 대기 초대 하나").contains("|" + world.householdB() + "|대기|");
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(10)));
+
+        expectExactProblem(issue(world.memberA(), ORIGIN, "{\"expiresInDays\": 3}"), 403, PERMISSION_DENIED);
+        expectExactProblem(removeMember(world.ownerA(), ORIGIN, String.valueOf(world.ownerB().userId())), 404, NOT_FOUND);
+        expectExactProblem(removeMember(world.ownerA(), ORIGIN, String.valueOf(world.memberA().userId())), 401, REAUTH_REQUIRED);
+
+        assertThat(invitations()).isEqualTo(beforeInvitations);
+        assertThat(memberships()).isEqualTo(beforeMembers);
+    }
+
+    @Test
+    @DisplayName("T049 B2 US3-4 FR-023: owner의 자기 자신 제거는 인증이 5분 안이든 오래되었든 403 PERMISSION_DENIED이고 멤버십이 그대로다")
+    void ownerSelfRemovalIsPermissionDenied() throws Exception {
+        Instant authAt = frozenNow();
+        Households.World world = households.world();
+        String before = memberships();
+        String self = String.valueOf(world.ownerA().userId());
+
+        expectExactProblem(removeMember(world.ownerA(), ORIGIN, self), 403, PERMISSION_DENIED);
+        assertThat(memberships()).isEqualTo(before);
+
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(10)));
+        expectExactProblem(removeMember(world.ownerA(), ORIGIN, self), 403, PERMISSION_DENIED);
+        assertThat(memberships()).isEqualTo(before).contains(world.householdA() + "|" + self + "|owner|");
+        // 이 시각에 인증이 실제로 오래되었음을 같은 owner의 member 제거로 확인한다(자기 제거 확인이 재인증보다 먼저)
+        expectExactProblem(removeMember(world.ownerA(), ORIGIN, String.valueOf(world.memberA().userId())), 401, REAUTH_REQUIRED);
+        assertThat(memberships()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("T049 B2 US3-8 FR-023: 마지막 구글 인증이 오래된 member의 구성원 제거는 401이 아니라 403 PERMISSION_DENIED이고 멤버십이 그대로다")
+    void staleMemberRemoveIsPermissionDenied() throws Exception {
+        Instant authAt = frozenNow();
+        Households.World world = households.world();
+        String before = memberships();
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(10)));
+
+        expectExactProblem(removeMember(world.memberA(), ORIGIN, String.valueOf(world.ownerA().userId())), 403, PERMISSION_DENIED);
+        // 권한 확인(3단계)이 경로 번호 확인(4단계)보다 먼저다
+        expectExactProblem(removeMember(world.memberA(), ORIGIN, "abc"), 403, PERMISSION_DENIED);
+
+        assertThat(memberships()).isEqualTo(before);
+        // 이 시각에 인증이 실제로 오래되었음을 같은 가구 owner의 제거로 확인한다
+        expectExactProblem(removeMember(world.ownerA(), ORIGIN, String.valueOf(world.memberA().userId())), 401, REAUTH_REQUIRED);
+        assertThat(memberships()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("T049 B2 US1-6 FR-026: 멤버십 없는 사람의 구성원 제거와 가구 나가기는 403 NO_HOUSEHOLD이고 다른 가구의 멤버십이 바뀌지 않는다")
+    void removeAndLeaveNeedHousehold() throws Exception {
+        Households.World world = households.world();
+        Person loner = world.loner();
+        String before = memberships();
+
+        expectExactProblem(removeMember(loner, ORIGIN, String.valueOf(world.ownerA().userId())), 403, NO_HOUSEHOLD);
+        expectExactProblem(removeMember(loner, ORIGIN, "abc"), 403, NO_HOUSEHOLD);
+        expectExactProblem(leave(loner, ORIGIN), 403, NO_HOUSEHOLD);
+
+        assertThat(memberships()).isEqualTo(before);
+        assertThat(membershipCount(loner)).isZero();
+    }
+
+    @Test
+    @DisplayName("T049 B2 FR-023: 허용 밖 Origin의 구성원 제거와 가구 나가기는 403 ORIGIN_REJECTED이고 멤버십이 그대로이며, 허용 Origin이면 나가기 204")
+    void foreignOriginRemoveAndLeaveRejected() throws Exception {
+        Households.World world = households.world();
+        String member = String.valueOf(world.memberA().userId());
+        String before = memberships();
+
+        expectExactProblem(removeMember(world.ownerA(), FOREIGN_ORIGIN, member), 403, ORIGIN_REJECTED);
+        expectExactProblem(leave(world.memberA(), FOREIGN_ORIGIN), 403, ORIGIN_REJECTED);
+        // Origin 확인이 멤버십 확인보다 먼저다
+        expectExactProblem(leave(world.loner(), FOREIGN_ORIGIN), 403, ORIGIN_REJECTED);
+
+        assertThat(memberships()).isEqualTo(before).contains(world.householdA() + "|" + member + "|member|");
+
+        // 짝: 허용 Origin이면 같은 member가 나간다
+        leave(world.memberA(), ORIGIN).andExpect(status().isNoContent());
+        assertThat(membershipCount(world.memberA())).isZero();
+    }
+
+    private ResultActions removeMember(Person person, String origin, String userId) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household/members/" + userId)).header(HttpHeaders.ORIGIN, origin)
+                .cookie(person.cookie()));
+    }
+
+    private ResultActions leave(Person person, String origin) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household/membership")).header(HttpHeaders.ORIGIN, origin).cookie(person.cookie()));
+    }
+
     /** 초 단위로 자른 지금 시각에 Clock을 멈춘다. 그 뒤 로그인한 사람의 마지막 구글 인증 시각이 이 값이다. */
     private Instant frozenNow() {
         Instant at = Instant.now().truncatedTo(ChronoUnit.SECONDS);

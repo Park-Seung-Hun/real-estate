@@ -4,7 +4,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,7 +19,7 @@ import estate.household.authz.Permission;
 import estate.user.application.UserProfiles;
 import estate.user.security.SessionLoginInfo;
 
-/** 가구 만들기와 함께 보는 사람 목록(contracts `POST`, `GET /api/v1/household`). 가구 구성원과 사용자 표시 자료를 화면 API가 합친다. */
+/** 가구 만들기, 함께 보는 사람 목록, 구성원 제거, 가구 나가기(contracts `/api/v1/household`). 가구 구성원과 사용자 표시 자료를 화면 API가 합친다. */
 @RestController
 class HouseholdController {
 
@@ -52,5 +54,19 @@ class HouseholdController {
             return new Member(m.getUserId(), p.displayName(), m.getRole().dbValue(), p.loginEmail(), p.emailVerified(),
                     m.getUserId() == membership.userId());
         }).toList());
+    }
+
+    @DeleteMapping("/api/v1/household/members/{userId}")
+    @Access(Permission.MEMBER_REMOVE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void remove(HouseholdMembership membership, SessionLoginInfo login, @PathVariable String userId) {
+        service.removeMember(membership.householdId(), membership.userId(), login.lastGoogleAuthAt(), userId);
+    }
+
+    @DeleteMapping("/api/v1/household/membership")
+    @Access(Permission.MEMBER_LEAVE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void leave(HouseholdMembership membership) {
+        service.leave(membership.householdId(), membership.userId());
     }
 }

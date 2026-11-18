@@ -10,15 +10,17 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import estate.common.reauth.ReauthJudge;
 import estate.common.web.ProblemCode;
 import estate.common.web.ProblemException;
 import estate.household.domain.Household;
+import estate.household.domain.HouseholdLocks;
 import estate.household.domain.HouseholdMember;
 import estate.household.domain.HouseholdMemberRepository;
 import estate.household.domain.HouseholdRepository;
 import estate.household.domain.HouseholdRole;
 
-/** 가구 만들기와 구성원 조회(research R9). */
+/** 가구 만들기, 구성원 조회, 구성원 제거, 가구 나가기(research R3, R9, R10). */
 @Service
 public class HouseholdService {
 
@@ -26,11 +28,16 @@ public class HouseholdService {
 
     private final HouseholdRepository households;
     private final HouseholdMemberRepository members;
+    private final HouseholdLocks locks;
+    private final ReauthJudge reauthJudge;
     private final Clock clock;
 
-    HouseholdService(HouseholdRepository households, HouseholdMemberRepository members, Clock clock) {
+    HouseholdService(HouseholdRepository households, HouseholdMemberRepository members, HouseholdLocks locks,
+            ReauthJudge reauthJudge, Clock clock) {
         this.households = households;
         this.members = members;
+        this.locks = locks;
+        this.reauthJudge = reauthJudge;
         this.clock = clock;
     }
 
@@ -54,6 +61,41 @@ public class HouseholdService {
     /** owner, member 순서의 구성원. */
     public List<HouseholdMember> members(long householdId) {
         return members.findByHouseholdId(householdId).stream().sorted(Comparator.comparing(HouseholdMember::getRole)).toList();
+    }
+
+    /** 4단계 존재 확인, 5단계 자기 자신, 6단계 재인증, 가구 행 잠금, 삭제 순서다(research R3). 다른 가구의 사람과 없는 번호는 같은 404다. */
+    @Transactional
+    public void removeMember(long householdId, long userId, Instant lastGoogleAuthAt, String targetUserId) {
+        long target = PathIds.parse(targetUserId);
+        if (!members.existsByHouseholdIdAndUserId(householdId, target)) {
+            throw new ProblemException(ProblemCode.NOT_FOUND);
+        }
+        if (target == userId) {
+            throw new ProblemException(ProblemCode.PERMISSION_DENIED);
+        }
+        reauthJudge.require(lastGoogleAuthAt);
+        lock(householdId);
+        // 007: 그 사람의 임장 기록 author_id 비우기를 여기(잠금 뒤, 멤버십 삭제 전)에 더한다(research R10)
+        if (members.deleteMembership(householdId, target) == 0) {
+            throw new ProblemException(ProblemCode.NOT_FOUND);
+        }
+    }
+
+    /** 재인증은 없다. 권한 확인기가 읽은 뒤 잠금 전에 owner가 제거했으면 삭제 건수가 0이라 403 NO_HOUSEHOLD다(FR-019). */
+    @Transactional
+    public void leave(long householdId, long userId) {
+        lock(householdId);
+        // 007: 그 사람의 임장 기록 author_id 비우기를 여기(잠금 뒤, 멤버십 삭제 전)에 더한다(research R10)
+        if (members.deleteMembership(householdId, userId) == 0) {
+            throw new ProblemException(ProblemCode.NO_HOUSEHOLD);
+        }
+    }
+
+    // 잠금 전에 가구가 삭제되었으면 빈 결과라 403 NO_HOUSEHOLD(research R3)
+    private void lock(long householdId) {
+        if (!locks.lock(householdId)) {
+            throw new ProblemException(ProblemCode.NO_HOUSEHOLD);
+        }
     }
 
     // 메시지 문장이 아니라 서버가 보낸 제약 필드로 읽어 DB 메시지 언어(lc_messages)와 관계없다. 키 값은 읽지 않는다
