@@ -18,6 +18,7 @@ import {
   mockApi,
   networkError,
   noContent,
+  noHousehold,
   originRejected,
   type Reply,
   serverError,
@@ -70,6 +71,7 @@ function withdrawable() {
   let session = true
   return (call: ApiCall) => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return session ? me : unauthenticated
+    if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
     if (call.method === 'DELETE' && call.path === '/api/v1/me') {
       session = false
       return noContent
@@ -115,7 +117,9 @@ describe('탈퇴 확인 화면', () => {
     await screen.findByText(NO_HOUSEHOLD)
     expect(screen.queryByText(WITHDRAW_NOTICE)).toBeNull()
     await settle()
-    expect(api.calls.filter((call) => !(call.method === 'GET' && call.path === '/api/v1/me'))).toEqual([])
+    expect(
+      api.calls.filter((call) => !(call.method === 'GET' && ['/api/v1/me', '/api/v1/household'].includes(call.path))),
+    ).toEqual([])
   })
 
   it('US3-3: 확인 화면에서 탈퇴하면 DELETE /api/v1/me 한 번 뒤 로그인 화면이다', async () => {
@@ -141,6 +145,7 @@ function deleteReplies(...replies: Outcome[]) {
   let session = true
   return (call: ApiCall): Outcome | undefined => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return session ? me : unauthenticated
+    if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
     if (call.method === 'DELETE' && call.path === '/api/v1/me') {
       const reply = replies.shift() ?? noContent
       if (reply !== networkError && (reply.status === 204 || reply.status === 401)) session = false
@@ -247,6 +252,7 @@ const reauthRequired: Reply = {
 function keepSession(...replies: Outcome[]) {
   return (call: ApiCall): Outcome | undefined => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return me
+    if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
     if (call.method === 'DELETE' && call.path === '/api/v1/me') return replies.shift() ?? noContent
     return undefined
   }

@@ -28,6 +28,36 @@ export const me: Reply = {
   body: { displayName: '엄마', loginEmail: 'user1@example.com', emailVerified: true },
 }
 
+export const members: Reply = {
+  status: 200,
+  body: {
+    members: [{ userId: 1, displayName: '엄마', role: 'owner', loginEmail: 'user1@example.com', emailVerified: true, me: true }],
+  },
+}
+
+// 계약(specs/002-household-sharing/contracts/openapi.yaml)의 NoHousehold, HasHousehold 예시
+export const noHousehold: Reply = {
+  status: 403,
+  body: {
+    type: 'https://example.com/problems/no-household',
+    title: '가구가 없습니다',
+    status: 403,
+    detail: '가구를 만들거나 초대 링크로 들어온 뒤 다시 시도해 주세요.',
+    code: 'NO_HOUSEHOLD',
+  },
+}
+
+export const hasHousehold: Reply = {
+  status: 409,
+  body: {
+    type: 'https://example.com/problems/has-household',
+    title: '이미 가구가 있습니다',
+    status: 409,
+    detail: '가구를 나가거나 삭제한 뒤 다시 시도해 주세요.',
+    code: 'HAS_HOUSEHOLD',
+  },
+}
+
 export const noContent: Reply = { status: 204 }
 
 export const originRejected: Reply = {
