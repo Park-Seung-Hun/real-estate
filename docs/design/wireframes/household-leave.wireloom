@@ -1,0 +1,10 @@
+window:
+  navbar:
+    leading:
+      backbutton "가족 초대"
+    center:
+      text "가구 나가기" bold
+  col 360:
+    text "가구를 나가면 이 가구의 기록을 볼 수 없습니다. 다시 들어오려면 새 초대 링크가 필요합니다."
+    button "나가기" primary
+    button "취소"
