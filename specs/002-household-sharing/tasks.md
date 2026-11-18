@@ -67,25 +67,25 @@
 
 ### 보안 경계 테스트 (구현과 다른 쪽이 먼저 작성)
 
-- [ ] T017 [P] [US1] B2(US1 몫) `src/test/java/estate/household/security/ResponseOrderSecurityTest.java`: `POST /api/v1/household`는 로그인 없음이면 401, 허용 밖 Origin이면 403 `ORIGIN_REJECTED`이고 가구가 생기지 않음, 멤버십이 있으면 409 `HAS_HOUSEHOLD`이고 가구 수와 멤버십이 그대로(US1-3, FR-005). 멤버십 없는 사람의 `GET /api/v1/household`는 403 `NO_HOUSEHOLD`(US1-6, FR-026). `GET /api/v1/household/invitations`의 같은 확인은 T032에서 추가한다
-- [ ] T018 [P] [US1] B6(US1 몫) `src/test/java/estate/household/security/HouseholdConcurrencySecurityTest.java`: 같은 사람의 동시 가구 만들기를 두 순서로 만든다. 다른 연결에 그 사람의 커밋하지 않은 가구와 멤버십 행을 삽입해 두고 요청을 보내 기다리게 한 뒤, 커밋하면 409 `HAS_HOUSEHOLD`이고 요청 쪽 가구 행이 롤백되어 남지 않음, 롤백하면 201(US1-4, FR-004, research R9). 탈퇴와 같은 사람의 가구 만들기를 두 순서로 겹치면(테스트가 다른 연결에서 사용자 행을 먼저 `FOR UPDATE`로 잠가 둠) 탈퇴가 먼저일 때 가구 만들기가 Problem 형식의 500이고 가구와 멤버십 행이 남지 않음, 가구 만들기가 먼저일 때 탈퇴가 409 `HAS_HOUSEHOLD`이고 사용자 행이 남음(research R9)
+- [X] T017 [P] [US1] B2(US1 몫) `src/test/java/estate/household/security/ResponseOrderSecurityTest.java`: `POST /api/v1/household`는 로그인 없음이면 401, 허용 밖 Origin이면 403 `ORIGIN_REJECTED`이고 가구가 생기지 않음, 멤버십이 있으면 409 `HAS_HOUSEHOLD`이고 가구 수와 멤버십이 그대로(US1-3, FR-005). 멤버십 없는 사람의 `GET /api/v1/household`는 403 `NO_HOUSEHOLD`(US1-6, FR-026). `GET /api/v1/household/invitations`의 같은 확인은 T032에서 추가한다
+- [X] T018 [P] [US1] B6(US1 몫) `src/test/java/estate/household/security/HouseholdConcurrencySecurityTest.java`: 같은 사람의 동시 가구 만들기를 두 순서로 만든다. 다른 연결에 그 사람의 커밋하지 않은 가구와 멤버십 행을 삽입해 두고 요청을 보내 기다리게 한 뒤, 커밋하면 409 `HAS_HOUSEHOLD`이고 요청 쪽 가구 행이 롤백되어 남지 않음, 롤백하면 201(US1-4, FR-004, research R9). 탈퇴와 같은 사람의 가구 만들기를 두 순서로 겹치면(테스트가 다른 연결에서 사용자 행을 먼저 `FOR UPDATE`로 잠가 둠) 탈퇴가 먼저일 때 가구 만들기가 Problem 형식의 500이고 가구와 멤버십 행이 남지 않음, 가구 만들기가 먼저일 때 탈퇴가 409 `HAS_HOUSEHOLD`이고 사용자 행이 남음(research R9)
 
 ### 동작 테스트
 
-- [ ] T019 [P] [US1] `src/test/java/estate/household/HouseholdCreateTest.java`: 가구 만들기가 201이고 본문이 없음, 멤버십 역할이 `owner`이고 `joined_at`이 `Clock` 현재 시각(FR-001), 함께 보는 사람 목록에 본인 한 명이 `role: owner`, `me: true`, 복호화한 로그인 이메일, `emailVerified`, 표시 이름으로 나옴(US1-2). 가구를 만들지 않고 로그아웃과 로그인을 세 번 반복해도 가구 행과 멤버십 행이 없음(US1-7, FR-001). `email_verified=false` 계정도 가구를 만들고 목록에 `emailVerified: false`(spec Edge Cases). 구글이 이름을 보내지 않은 계정은 목록의 `displayName`이 null
-- [ ] T022 [US1] 실제 서버 확인 `src/test/java/estate/household/HouseholdErrorBodyServerTest.java`(`@SpringBootTest(webEnvironment = RANDOM_PORT)`, T007의 `RealServerClient`): 멤버십 없는 사람의 `GET /api/v1/household` 403 `NO_HOUSEHOLD`와 가구가 있는 사람의 `POST /api/v1/household` 409 `HAS_HOUSEHOLD`의 본문이 `application/problem+json`이고 contracts 예시의 `type`, `title`, `status`, `detail`, `code`와 같으며 T017의 MockMvc 본문과 같음(US1-3, US1-6). 구현과 다른 쪽이 spec과 설계 문서에서 작성하고, T021 뒤 통과시킨다
+- [X] T019 [P] [US1] `src/test/java/estate/household/HouseholdCreateTest.java`: 가구 만들기가 201이고 본문이 없음, 멤버십 역할이 `owner`이고 `joined_at`이 `Clock` 현재 시각(FR-001), 함께 보는 사람 목록에 본인 한 명이 `role: owner`, `me: true`, 복호화한 로그인 이메일, `emailVerified`, 표시 이름으로 나옴(US1-2). 가구를 만들지 않고 로그아웃과 로그인을 세 번 반복해도 가구 행과 멤버십 행이 없음(US1-7, FR-001). `email_verified=false` 계정도 가구를 만들고 목록에 `emailVerified: false`(spec Edge Cases). 구글이 이름을 보내지 않은 계정은 목록의 `displayName`이 null
+- [X] T022 [US1] 실제 서버 확인 `src/test/java/estate/household/HouseholdErrorBodyServerTest.java`(`@SpringBootTest(webEnvironment = RANDOM_PORT)`, T007의 `RealServerClient`): 멤버십 없는 사람의 `GET /api/v1/household` 403 `NO_HOUSEHOLD`와 가구가 있는 사람의 `POST /api/v1/household` 409 `HAS_HOUSEHOLD`의 본문이 `application/problem+json`이고 contracts 예시의 `type`, `title`, `status`, `detail`, `code`와 같으며 T017의 MockMvc 본문과 같음(US1-3, US1-6). 구현과 다른 쪽이 spec과 설계 문서에서 작성하고, T021 뒤 통과시킨다
 
 ### 구현
 
-- [ ] T020 [US1] 가구 만들기 `src/main/java/estate/household/application/HouseholdService.java`(research R9): 한 트랜잭션에서 가구 행과 owner 멤버십 행(`joined_at`은 주입한 `Clock`)을 삽입. 유니크 위반이 제약 이름 `household_member_user_id_key`일 때만 409 `HAS_HOUSEHOLD`로 바꾸고 다른 위반은 그대로 던짐
-- [ ] T021 [US1] 가구 컨트롤러 `src/main/java/estate/household/web/HouseholdController.java`(contracts): `POST /api/v1/household`(`@Access(NONE, ABSENT)`, 201, 본문 없음), `GET /api/v1/household`(`household:read`, `REQUIRED`). 목록은 가구 모듈 서비스의 멤버십과 `UserProfiles`의 결과를 컨트롤러(화면 API)가 합쳐 owner, member 순서로 반환(`userId`, `displayName`, `role`, `loginEmail`, `emailVerified`, `me`, C4 컴포넌트의 "화면 API 어댑터가 합침"). T017, T018, T019, T022가 통과한다
+- [X] T020 [US1] 가구 만들기 `src/main/java/estate/household/application/HouseholdService.java`(research R9): 한 트랜잭션에서 가구 행과 owner 멤버십 행(`joined_at`은 주입한 `Clock`)을 삽입. 유니크 위반이 제약 이름 `household_member_user_id_key`일 때만 409 `HAS_HOUSEHOLD`로 바꾸고 다른 위반은 그대로 던짐
+- [X] T021 [US1] 가구 컨트롤러 `src/main/java/estate/household/web/HouseholdController.java`(contracts): `POST /api/v1/household`(`@Access(NONE, ABSENT)`, 201, 본문 없음), `GET /api/v1/household`(`household:read`, `REQUIRED`). 목록은 가구 모듈 서비스의 멤버십과 `UserProfiles`의 결과를 컨트롤러(화면 API)가 합쳐 owner, member 순서로 반환(`userId`, `displayName`, `role`, `loginEmail`, `emailVerified`, `me`, C4 컴포넌트의 "화면 API 어댑터가 합침"). T017, T018, T019, T022가 통과한다
 
 ### 웹 화면
 
 - [X] T023 [US1] 가구 없음 화면 `web/src/pages/NoHouseholdPage.tsx`, `web/src/api/client.ts`(research R14 표 그대로): "아직 가구가 없습니다.", "가족과 함께 볼 기록을 모으려면 가구를 만드세요.", "가족에게 받은 초대 링크가 있으면 그 링크를 여세요.", 버튼 "가구 만들기", "로그아웃", "탈퇴"(FR-002). 가구 만들기는 `POST /api/v1/household` 뒤 목록을 다시 읽어 임시 첫 화면을 그림. 409 `HAS_HOUSEHOLD`(다른 탭에서 이미 만듦)도 목록을 다시 읽어 임시 첫 화면을 그림
 - [X] T024 [US1] 임시 첫 화면의 기본 `web/src/pages/HomePage.tsx`, `web/src/App.tsx`(research R14 임시 첫 화면 표): 가구 있음 상태의 `/`에 그림. "함께 보는 사람" 제목, 사람마다 표시 이름, 내 항목의 "(나)", 역할 "owner" 또는 "member", 로그인 이메일, 검증되지 않았으면 "검증되지 않음", 표시 이름이 없으면 로그인 이메일만. 아래 버튼 "로그아웃". 탈퇴 버튼은 두지 않음(FR-021). owner와 member에게만 보이는 영역은 US2~US5 단계에서 추가한다
 - [X] T025 [P] [US1] 화면 테스트 `web/tests/unit/household-create.test.tsx`와 001 테스트 기대값 수정 `web/tests/unit/login.test.tsx`, `web/tests/unit/withdraw.test.tsx`: 가구 없음 화면의 안내 셋과 버튼 셋(US1-1, FR-002), 가구 만들기를 누르면 다른 입력 없이 임시 첫 화면이고 본인 한 명이 "(나)"와 owner로 보임(US1-2, SC-001), 로그인 뒤 목록이 200이면 임시 첫 화면, 403 `NO_HOUSEHOLD`면 가구 없음 화면(US1-5, FR-003), 가구 만들기 409면 임시 첫 화면, 임시 첫 화면에 탈퇴 버튼이 없음. 001 테스트의 가구 없음 화면 기대값(안내 문구, 버튼 둘)을 새 문구와 버튼 셋으로 수정
-- [ ] T026 [US1] 001 e2e 기대값 수정 `web/tests/e2e/login.spec.ts`: 가짜 구글 로그인 뒤 기다리는 문구와 "가구 없음과 탈퇴 확인" 테스트의 가구 없음 화면 문구를 FR-002의 안내 셋과 "가구 만들기" 버튼으로 수정
+- [X] T026 [US1] 001 e2e 기대값 수정 `web/tests/e2e/login.spec.ts`: 가짜 구글 로그인 뒤 기다리는 문구와 "가구 없음과 탈퇴 확인" 테스트의 가구 없음 화면 문구를 FR-002의 안내 셋과 "가구 만들기" 버튼으로 수정
 
 **Checkpoint**: US1만으로 가구 만들기와 임시 첫 화면(본인만 보이는 목록)이 동작합니다. 사용자가 브라우저로 확인할 순서는 quickstart "가구 만들기 (사용자 스토리 1)" 1~6번입니다.
 

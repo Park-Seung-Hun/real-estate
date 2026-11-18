@@ -50,6 +50,10 @@ test.describe('화면 폭 360px에서 가로 스크롤 없음', () => {
 
   test('가구 없음과 탈퇴 확인', async ({ page }) => {
     await loginWithFakeGoogle(page)
+    // FR-002: 가구 없음 화면의 안내 셋과 가구 만들기 버튼
+    await expect(page.getByText('가족과 함께 볼 기록을 모으려면 가구를 만드세요.')).toBeVisible()
+    await expect(page.getByText('가족에게 받은 초대 링크가 있으면 그 링크를 여세요.')).toBeVisible()
+    await expect(page.getByRole('button', { name: '가구 만들기' })).toBeVisible()
     await expectNoHorizontalScroll(page)
 
     // 탈퇴 요청은 보내지 않고 확인 화면만 연다
