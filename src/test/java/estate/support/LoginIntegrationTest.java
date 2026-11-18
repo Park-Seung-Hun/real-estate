@@ -10,11 +10,12 @@ import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 /**
  * {@code @IntegrationTest}에 가짜 구글 서버, 옮길 수 있는 Clock, SessionRows를 더한다. MockMvc는 {@code @AutoConfigureMockMvc}를 직접 붙인다.
- * 테스트마다 Clock, 가짜 서버 예약, 삭제 실패 트리거를 되돌리고 spring_session 행을 모두 지운다(사용자 행은 그대로).
+ * 테스트마다 Clock, 가짜 서버 예약, 삭제 실패 트리거를 되돌리고 invitation, household_member, household, spring_session 행을 이 순서로 모두 지운다(사용자 행은 그대로).
  * 가짜 서버: {@code FakeGoogleServer.willReturn(...)}, 로그인: {@code new LoginClient(mockMvc)}.
  */
 @Target(ElementType.TYPE)
@@ -40,6 +41,11 @@ public @interface LoginIntegrationTest {
             ctx.getBean(MutableClock.class).reset();
             FakeGoogleServer.reset();
             ctx.getBean(SessionRows.class).clearDeleteFailures();
+            // 자식 행부터 지운다(세션 행 삭제보다 먼저)
+            var jdbc = ctx.getBean(JdbcClient.class);
+            jdbc.sql("delete from invitation").update();
+            jdbc.sql("delete from household_member").update();
+            jdbc.sql("delete from household").update();
             ctx.getBean(SessionRows.class).deleteAll();
         }
     }

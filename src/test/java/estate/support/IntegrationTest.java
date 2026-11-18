@@ -22,6 +22,8 @@ import org.springframework.test.context.TestPropertySource;
         "spring.flyway.locations=classpath:db/migration,classpath:db/test-migration",
         "GOOGLE_CLIENT_ID=test-client-id",
         "GOOGLE_CLIENT_SECRET=test-client-secret",
+        // HouseholdLock이 풀에서 연결을 하나 더 쓰므로 요청 10건이 잠금을 기다려도 풀이 마르지 않게 한다
+        "spring.datasource.hikari.maximum-pool-size=20",
         // MockMvc 요청은 https://localhost로 가므로 요청 출처 검사의 허용 출처도 같게 둔다
         "estate.web.allowed-origins=https://localhost"})
 public @interface IntegrationTest {
