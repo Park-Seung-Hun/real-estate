@@ -1,0 +1,10 @@
+window:
+  navbar:
+    leading:
+      backbutton "가족 초대"
+    center:
+      text "가구 삭제" bold
+  col 360:
+    text "가구를 삭제하면 가구, 구성원 2명의 연결, 보낸 초대가 삭제되며 되돌릴 수 없습니다."
+    button "가구 삭제" primary
+    button "취소"

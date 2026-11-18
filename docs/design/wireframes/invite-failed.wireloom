@@ -1,0 +1,6 @@
+window:
+  header large:
+    text "가구 초대"
+  col 360:
+    text "만료된 초대 링크입니다. 가족에게 새 초대 링크를 받아 주세요."
+    button "첫 화면으로" primary

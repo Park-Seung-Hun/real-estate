@@ -1,0 +1,7 @@
+window:
+  header large:
+    text "가구 초대"
+  col 360:
+    text "하나님의 가구에 들어갑니다. 가족에게 받은 링크가 맞을 때만 들어가세요."
+    button "들어가기" primary
+    button "취소"
