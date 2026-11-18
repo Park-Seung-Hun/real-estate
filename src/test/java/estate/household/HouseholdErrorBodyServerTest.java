@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 
 import jakarta.servlet.http.Cookie;
 
@@ -19,15 +21,18 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import estate.support.Households;
 import estate.support.LoginClient;
 import estate.support.LoginIntegrationTest;
 import estate.support.RealServerClient;
+import estate.support.SessionRows;
 
 /**
  * T022 실제 서버 확인(US1-3, US1-6, research R5, R16): 403 NO_HOUSEHOLD와 409 HAS_HOUSEHOLD의 본문을 실제 서버(RANDOM_PORT)에서 받아
@@ -49,16 +54,55 @@ class HouseholdErrorBodyServerTest {
             {"type": "https://example.com/problems/has-household", "title": "이미 가구가 있습니다", "status": 409,
              "detail": "가구를 나가거나 삭제한 뒤 다시 시도해 주세요.", "code": "HAS_HOUSEHOLD"}""";
 
+    // T038(US2 몫): contracts/openapi.yaml의 예시
+    static final String INVITATION_REVOKED = """
+            {"type": "https://example.com/problems/invitation-revoked", "title": "취소된 초대 링크입니다", "status": 409,
+             "detail": "가족에게 새 초대 링크를 받아 주세요.", "code": "INVITATION_REVOKED"}""";
+    static final String INVITATION_USED = """
+            {"type": "https://example.com/problems/invitation-used", "title": "이미 사용된 초대 링크입니다", "status": 409,
+             "detail": "가족에게 새 초대 링크를 받아 주세요.", "code": "INVITATION_USED"}""";
+    static final String INVITATION_EXPIRED = """
+            {"type": "https://example.com/problems/invitation-expired", "title": "초대 링크가 만료되었습니다", "status": 409,
+             "detail": "가족에게 새 초대 링크를 받아 주세요.", "code": "INVITATION_EXPIRED"}""";
+    static final String HOUSEHOLD_FULL = """
+            {"type": "https://example.com/problems/household-full", "title": "구성원이 이미 둘입니다", "status": 409,
+             "detail": "가구 구성원은 둘까지입니다.", "code": "HOUSEHOLD_FULL"}""";
+    static final String ALREADY_IN_THIS_HOUSEHOLD = """
+            {"type": "https://example.com/problems/already-in-this-household", "title": "이미 이 가구의 구성원입니다", "status": 409,
+             "detail": "링크는 가족에게 보내세요.", "code": "ALREADY_IN_THIS_HOUSEHOLD"}""";
+    static final String NOT_FOUND = """
+            {"type": "https://example.com/problems/not-found", "title": "찾을 수 없습니다", "status": 404,
+             "detail": "주소를 확인해 주세요.", "code": "NOT_FOUND"}""";
+    static final String EXPIRES_IN_DAYS_INVALID = """
+            {"type": "https://example.com/problems/validation-failed", "title": "입력값이 올바르지 않습니다", "status": 400,
+             "detail": "입력값 하나를 확인해 주세요.", "code": "VALIDATION_FAILED",
+             "errors": [{"pointer": "#/expiresInDays", "detail": "만료 기간은 1일부터 7일까지 고를 수 있습니다."}]}""";
+    static final String BODY_INVALID = """
+            {"type": "https://example.com/problems/validation-failed", "title": "입력값이 올바르지 않습니다", "status": 400,
+             "detail": "입력값 하나를 확인해 주세요.", "code": "VALIDATION_FAILED",
+             "errors": [{"pointer": "#", "detail": "알 수 없는 필드가 있습니다."}]}""";
+    // 계약 예시(body)는 다른 키 경우다. 깨진 JSON, 객체가 아닌 본문, 빈 본문은 ProblemAdvice와 같은 문구다
+    static final String BODY_UNREADABLE = """
+            {"type": "https://example.com/problems/validation-failed", "title": "입력값이 올바르지 않습니다", "status": 400,
+             "detail": "입력값 하나를 확인해 주세요.", "code": "VALIDATION_FAILED",
+             "errors": [{"pointer": "#", "detail": "요청 본문을 읽을 수 없습니다."}]}""";
+
     @LocalServerPort
     int port;
     @Autowired
     MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    SessionRows sessions;
 
     private RealServerClient server;
+    private Households households;
 
     @BeforeEach
     void setUp() {
         server = new RealServerClient(port);
+        households = new Households(mvc, jdbc, sessions);
     }
 
     @Test
@@ -94,6 +138,126 @@ class HouseholdErrorBodyServerTest {
                 .andReturn();
         assertThat(mock.getResponse().getStatus()).isEqualTo(409);
         assertThat(JSON.readTree(mock.getResponse().getContentAsString(StandardCharsets.UTF_8))).as("MockMvc 본문과 같다").isEqualTo(real);
+    }
+
+    @Test
+    @DisplayName("T038 US2-12 US2-13 US2-14 US2-15 실서버: 초대 확인과 수락의 409 여섯 코드가 계약 예시와 같고 MockMvc 본문과 같다")
+    void invitationRejectionsOnRealServer() throws Exception {
+        String ownerA = server.login();
+        String ownerB = server.login();
+        String joiner = server.login();
+        String opener = server.login();
+        assertThat(create(ownerA).statusCode()).isEqualTo(201);
+        assertThat(create(ownerB).statusCode()).isEqualTo(201);
+        long creatorA = userIdOf(ownerA);
+        long householdA = households.householdIdOf(new Households.Person(cookie(ownerA), creatorA));
+
+        JsonNode revokedInvitation = issue(ownerA);
+        assertThat(sendJson("DELETE", ownerA, "/api/v1/household/invitations/" + revokedInvitation.path("id").longValue(), null).statusCode())
+                .isEqualTo(204);
+        assertSameRejection(opener, "/api/v1/invitations/preview", revokedInvitation.path("token").stringValue(), INVITATION_REVOKED);
+        assertSameRejection(opener, "/api/v1/invitations/accept", revokedInvitation.path("token").stringValue(), INVITATION_REVOKED);
+
+        String usedToken = issue(ownerA).path("token").stringValue();
+        assertThat(postToken(joiner, "/api/v1/invitations/accept", usedToken).statusCode()).isEqualTo(204);
+        assertSameRejection(opener, "/api/v1/invitations/preview", usedToken, INVITATION_USED);
+        assertSameRejection(opener, "/api/v1/invitations/accept", usedToken, INVITATION_USED);
+
+        Instant now = Instant.now();
+        String expired = households.insertInvitation(householdA, creatorA, "대기", now.minus(Duration.ofDays(2)), now.minus(Duration.ofDays(1))).token();
+        assertSameRejection(opener, "/api/v1/invitations/preview", expired, INVITATION_EXPIRED);
+        assertSameRejection(opener, "/api/v1/invitations/accept", expired, INVITATION_EXPIRED);
+
+        String full = households.insertInvitation(householdA, creatorA, "대기", now, now.plus(Duration.ofDays(3))).token();
+        assertSameRejection(opener, "/api/v1/invitations/preview", full, HOUSEHOLD_FULL);
+        assertSameRejection(opener, "/api/v1/invitations/accept", full, HOUSEHOLD_FULL);
+
+        String tokenB = issue(ownerB).path("token").stringValue();
+        assertSameRejection(ownerB, "/api/v1/invitations/preview", tokenB, ALREADY_IN_THIS_HOUSEHOLD);
+        assertSameRejection(ownerB, "/api/v1/invitations/accept", tokenB, ALREADY_IN_THIS_HOUSEHOLD);
+        assertSameRejection(ownerA, "/api/v1/invitations/preview", tokenB, HAS_HOUSEHOLD);
+        assertSameRejection(ownerA, "/api/v1/invitations/accept", tokenB, HAS_HOUSEHOLD);
+    }
+
+    @Test
+    @DisplayName("T038 US2-12 실서버: 형식이 틀린 토큰은 확인과 수락 모두 404 NOT_FOUND이고 계약 예시, MockMvc 본문과 같다")
+    void malformedTokenOnRealServer() throws Exception {
+        String session = server.login();
+        for (String token : new String[] {"abc", "", "A".repeat(42), "A".repeat(44), "!".repeat(43), "A".repeat(42) + "+"}) {
+            assertSameRejection(session, "/api/v1/invitations/preview", token, 404, NOT_FOUND);
+            assertSameRejection(session, "/api/v1/invitations/accept", token, 404, NOT_FOUND);
+        }
+    }
+
+    @Test
+    @DisplayName("T038 US2-3 실서버: 초대 발급의 만료 기간 오류는 400 #/expiresInDays, 알 수 없는 키와 깨진 JSON은 400 #이고 계약 예시, MockMvc 본문과 같다")
+    void issueValidationOnRealServer() throws Exception {
+        String session = server.login();
+        assertThat(create(session).statusCode()).isEqualTo(201);
+        String path = "/api/v1/household/invitations";
+
+        for (String body : new String[] {"{\"expiresInDays\": 0}", "{\"expiresInDays\": 8}", "{\"expiresInDays\": \"3\"}", "{\"expiresInDays\": null}", "{}"}) {
+            assertSameBody(session, path, body, 400, EXPIRES_IN_DAYS_INVALID);
+        }
+        assertSameBody(session, path, "{\"expiresInDays\": 3, \"extra\": 1}", 400, BODY_INVALID);
+        for (String body : new String[] {"{\"expiresInDays\": ", "[3]", ""}) {
+            assertSameBody(session, path, body, 400, BODY_UNREADABLE);
+        }
+        assertThat(jdbcCount("invitation")).as("거절된 요청은 초대를 만들지 않는다").isZero();
+    }
+
+    private void assertSameRejection(String session, String path, String token, String expectedJson) throws Exception {
+        assertSameRejection(session, path, token, 409, expectedJson);
+    }
+
+    private void assertSameRejection(String session, String path, String token, int status, String expectedJson) throws Exception {
+        assertSameBody(session, path, "{\"token\": \"" + token + "\"}", status, expectedJson);
+    }
+
+    /** 실제 서버의 응답이 계약 예시와 같고, 같은 세션 쿠키의 MockMvc 응답 본문과 같다. */
+    private void assertSameBody(String session, String path, String body, int status, String expectedJson) throws Exception {
+        JsonNode real = expectExactProblem(sendJson("POST", session, path, body), status, expectedJson);
+        MvcResult mock = mvc.perform(https(post(path)).header(HttpHeaders.ORIGIN, ORIGIN).cookie(cookie(session))
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andReturn();
+        assertThat(mock.getResponse().getStatus()).as(path + " " + body).isEqualTo(status);
+        assertThat(JSON.readTree(mock.getResponse().getContentAsString(StandardCharsets.UTF_8))).as("MockMvc 본문과 같다").isEqualTo(real);
+    }
+
+    private HttpResponse<String> postToken(String session, String path, String token) throws Exception {
+        return sendJson("POST", session, path, "{\"token\": \"" + token + "\"}");
+    }
+
+    private JsonNode issue(String session) throws Exception {
+        HttpResponse<String> response = sendJson("POST", session, "/api/v1/household/invitations", "{\"expiresInDays\": 3}");
+        assertThat(response.statusCode()).isEqualTo(201);
+        return JSON.readTree(response.body());
+    }
+
+    /** 가구가 있는 세션의 사용자 번호(함께 보는 사람 목록에서 me가 true인 항목). */
+    private long userIdOf(String session) throws Exception {
+        HttpResponse<String> response = server.send(HttpRequest.newBuilder(server.url("/api/v1/household")).GET()
+                .header("Cookie", LoginClient.SESSION_COOKIE + "=" + session));
+        for (JsonNode member : JSON.readTree(response.body()).path("members")) {
+            if (member.path("me").booleanValue()) {
+                return member.path("userId").longValue();
+            }
+        }
+        throw new IllegalStateException("me 항목이 없다: " + response.body());
+    }
+
+    private HttpResponse<String> sendJson(String method, String session, String path, String body) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(server.url(path))
+                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body))
+                .header("Origin", ORIGIN)
+                .header("Cookie", LoginClient.SESSION_COOKIE + "=" + session);
+        if (body != null) {
+            request.header("Content-Type", "application/json");
+        }
+        return server.send(request);
+    }
+
+    private long jdbcCount(String table) {
+        return jdbc.sql("select count(*) from " + table).query(Long.class).single();
     }
 
     private HttpResponse<String> create(String session) throws Exception {

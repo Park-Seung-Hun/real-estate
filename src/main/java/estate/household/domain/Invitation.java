@@ -92,4 +92,12 @@ public class Invitation {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public void accept() {
+        this.status = InvitationStatus.ACCEPTED;
+    }
+
+    public void revoke() {
+        this.status = InvitationStatus.REVOKED;
+    }
 }

@@ -64,6 +64,7 @@ class HouseholdConcurrencySecurityTest {
     static final String ORIGIN = "https://localhost";
     private static final Duration WAIT_LIMIT = Duration.ofSeconds(10);
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final int ACCEPTORS = 10;
 
     @Autowired
     MockMvc mvc;
@@ -84,7 +85,7 @@ class HouseholdConcurrencySecurityTest {
     void setUp() throws Exception {
         person = new Households(mvc, jdbc, sessions).newPerson();
         assertThat(userCount()).as("가구 행이 없다는 확인이 의미가 있도록 사용자 행이 먼저 있어야 한다").isEqualTo(1);
-        executor = Executors.newFixedThreadPool(2);
+        executor = Executors.newFixedThreadPool(ACCEPTORS); // T030의 동시 수락 열 건이 한꺼번에 잠금을 기다리게 한다
     }
 
     @AfterEach
@@ -197,6 +198,213 @@ class HouseholdConcurrencySecurityTest {
         assertThat(householdIds()).hasSize(1);
         assertThat(membershipOf()).isEqualTo(householdIds().getFirst() + "|owner");
         assertThat(sessions.rowsOfUser(person.userId())).as("세션도 남는다").isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("T030 B6 US2-16 FR-015 SC-003 R9: 가구 없는 열 명이 같은 링크의 수락으로 모두 가구 행 잠금을 기다리다 풀리면 1건만 204, 9건은 409 INVITATION_USED이고 구성원이 둘이다")
+    void concurrentAcceptOnlyOneJoins() throws Exception {
+        Households households = new Households(mvc, jdbc, sessions);
+        long household = households.createHousehold(person);
+        String token = households.invite(person, 3);
+        List<Person> joiners = new ArrayList<>();
+        for (int i = 0; i < ACCEPTORS; i++) {
+            joiners.add(households.newPerson());
+        }
+
+        List<Future<MvcResult>> accepts = new ArrayList<>();
+        try (HouseholdLock lock = HouseholdLock.holding(dataSource, household)) {
+            for (Person joiner : joiners) {
+                accepts.add(submit(() -> accept(joiner, token).andReturn()));
+            }
+            lock.awaitWaiting(ACCEPTORS);
+            assertThat(accepts).as("가구 행이 잠긴 동안 수락이 끝나면 안 된다").noneMatch(Future::isDone);
+
+            lock.commit();
+        }
+
+        List<Long> joined = new ArrayList<>();
+        int used = 0;
+        for (int i = 0; i < ACCEPTORS; i++) {
+            MvcResult result = accepts.get(i).get(10, TimeUnit.SECONDS);
+            if (result.getResponse().getStatus() == 204) {
+                joined.add(joiners.get(i).userId());
+            } else {
+                expectProblem(result, 409, "INVITATION_USED");
+                used++;
+            }
+        }
+        assertThat(joined).as("수락 성공은 정확히 한 건").hasSize(1);
+        assertThat(used).isEqualTo(ACCEPTORS - 1);
+        assertThat(jdbc.sql("select user_id || '|' || role from household_member where household_id = :h order by role desc")
+                .param("h", household).query(String.class).list())
+                .as("구성원은 owner와 수락에 성공한 한 사람뿐").containsExactly(person.userId() + "|owner", joined.getFirst() + "|member");
+        assertThat(jdbc.sql("select count(*) from household_member").query(Long.class).single()).as("진 아홉 명에게 멤버십이 없다").isEqualTo(2);
+        assertThat(invitationStatuses(household)).containsExactly("수락");
+    }
+
+    @Test
+    @DisplayName("T030 B6 US2-5 FR-009 R9: 같은 가구의 초대 발급 두 건이 모두 가구 행 잠금을 기다리다 풀리면 1건만 201, 다른 건은 409 INVITATION_PENDING이고 초대 행이 하나다")
+    void concurrentIssueOnlyOneCreated() throws Exception {
+        long household = new Households(mvc, jdbc, sessions).createHousehold(person);
+
+        Future<MvcResult> first;
+        Future<MvcResult> second;
+        try (HouseholdLock lock = HouseholdLock.holding(dataSource, household)) {
+            first = submit(() -> issue(2).andReturn());
+            second = submit(() -> issue(5).andReturn());
+            lock.awaitWaiting(2);
+            assertThat(first.isDone()).isFalse();
+            assertThat(second.isDone()).isFalse();
+
+            lock.commit();
+        }
+        MvcResult a = first.get(10, TimeUnit.SECONDS);
+        MvcResult b = second.get(10, TimeUnit.SECONDS);
+
+        MvcResult created = a.getResponse().getStatus() == 201 ? a : b;
+        MvcResult rejected = created == a ? b : a;
+        status().isCreated().match(created);
+        expectProblem(rejected, 409, "INVITATION_PENDING");
+        assertThat(invitationStatuses(household)).as("초대 행은 하나").containsExactly("대기");
+        long createdId = JSON.readTree(created.getResponse().getContentAsString()).path("id").longValue();
+        assertThat(jdbc.sql("select id from invitation").query(Long.class).single()).as("남은 행은 201 응답의 초대").isEqualTo(createdId);
+    }
+
+    @Test
+    @DisplayName("T030 B6 FR-011 R8 R9: 가구 행 잠금 뒤에 초대 취소가 먼저, 수락이 다음에 줄 서면 취소는 204, 수락은 409 INVITATION_REVOKED이고 멤버십이 생기지 않는다")
+    void revokeFirstThenAcceptIsRevoked() throws Exception {
+        Households households = new Households(mvc, jdbc, sessions);
+        long household = households.createHousehold(person);
+        String token = households.invite(person, 3);
+        long invitation = jdbc.sql("select id from invitation").query(Long.class).single();
+        Person joiner = households.newPerson();
+
+        Future<MvcResult> revoke;
+        Future<MvcResult> accept;
+        try (HouseholdLock lock = HouseholdLock.holding(dataSource, household)) {
+            revoke = submit(() -> revoke(invitation).andReturn());
+            lock.awaitWaiting(1);
+            accept = submit(() -> accept(joiner, token).andReturn());
+            lock.awaitWaiting(2);
+            assertThat(revoke.isDone()).isFalse();
+            assertThat(accept.isDone()).isFalse();
+
+            lock.commit();
+        }
+        MvcResult revoked = revoke.get(10, TimeUnit.SECONDS);
+        MvcResult accepted = accept.get(10, TimeUnit.SECONDS);
+
+        status().isNoContent().match(revoked);
+        expectProblem(accepted, 409, "INVITATION_REVOKED");
+        assertThat(invitationStatuses(household)).containsExactly("취소");
+        assertThat(jdbc.sql("select count(*) from household_member where user_id = :u").param("u", joiner.userId())
+                .query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("select count(*) from household_member where household_id = :h").param("h", household)
+                .query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("T030 B6 FR-011 R8 R9: 가구 행 잠금 뒤에 수락이 먼저, 초대 취소가 다음에 줄 서면 수락은 204, 취소는 409 INVITATION_NOT_PENDING이고 초대는 수락 상태다")
+    void acceptFirstThenRevokeIsNotPending() throws Exception {
+        Households households = new Households(mvc, jdbc, sessions);
+        long household = households.createHousehold(person);
+        String token = households.invite(person, 3);
+        long invitation = jdbc.sql("select id from invitation").query(Long.class).single();
+        Person joiner = households.newPerson();
+
+        Future<MvcResult> accept;
+        Future<MvcResult> revoke;
+        try (HouseholdLock lock = HouseholdLock.holding(dataSource, household)) {
+            accept = submit(() -> accept(joiner, token).andReturn());
+            lock.awaitWaiting(1);
+            revoke = submit(() -> revoke(invitation).andReturn());
+            lock.awaitWaiting(2);
+            assertThat(accept.isDone()).isFalse();
+            assertThat(revoke.isDone()).isFalse();
+
+            lock.commit();
+        }
+        MvcResult accepted = accept.get(10, TimeUnit.SECONDS);
+        MvcResult revoked = revoke.get(10, TimeUnit.SECONDS);
+
+        status().isNoContent().match(accepted);
+        expectProblem(revoked, 409, "INVITATION_NOT_PENDING");
+        assertThat(invitationStatuses(household)).containsExactly("수락");
+        assertThat(jdbc.sql("select household_id || '|' || role from household_member where user_id = :u").param("u", joiner.userId())
+                .query(String.class).single()).isEqualTo(household + "|member");
+    }
+
+    @Test
+    @DisplayName("T030 B6 FR-014 R9 T041: 다른 연결의 커밋하지 않은 멤버십을 기다리던 초대 수락은 그 연결이 커밋하면 409 HAS_HOUSEHOLD이고 초대는 대기, 초대한 가구의 구성원 수는 그대로다")
+    void concurrentAcceptAfterCommitIsConflict() throws Exception {
+        Households households = new Households(mvc, jdbc, sessions);
+        Person inviter = households.newPerson();
+        long household = households.createHousehold(inviter);
+        String token = households.invite(inviter, 3);
+
+        long lockHousehold;
+        Future<MvcResult> pending;
+        try (HouseholdLock lock = HouseholdLock.uncommittedMembership(dataSource, person.userId(), HouseholdRole.OWNER)) {
+            lockHousehold = lock.householdId();
+            pending = submit(() -> accept(person, token).andReturn());
+            lock.awaitWaiting(1);
+            assertThat(pending.isDone()).as("커밋하지 않은 멤버십이 있는 동안 수락이 끝나면 안 된다").isFalse();
+
+            lock.commit();
+        }
+        MvcResult result = pending.get(10, TimeUnit.SECONDS);
+
+        expectProblem(result, 409, "HAS_HOUSEHOLD");
+        assertThat(invitationStatuses(household)).as("거절된 수락은 초대 행을 바꾸지 않는다").containsExactly("대기");
+        assertThat(jdbc.sql("select user_id || '|' || role from household_member where household_id = :h").param("h", household)
+                .query(String.class).list()).as("초대한 가구의 구성원은 owner 한 사람뿐").containsExactly(inviter.userId() + "|owner");
+        assertThat(membershipOf()).as("다른 연결이 커밋한 멤버십만 남는다").isEqualTo(lockHousehold + "|owner");
+    }
+
+    @Test
+    @DisplayName("T030 B6 US2 R9 T041: 다른 연결의 커밋하지 않은 멤버십을 기다리던 초대 수락은 그 연결이 롤백하면 204이고 초대는 수락, 그 사람은 초대한 가구의 member다")
+    void concurrentAcceptAfterRollbackJoins() throws Exception {
+        Households households = new Households(mvc, jdbc, sessions);
+        Person inviter = households.newPerson();
+        long household = households.createHousehold(inviter);
+        String token = households.invite(inviter, 3);
+
+        long lockHousehold;
+        Future<MvcResult> pending;
+        try (HouseholdLock lock = HouseholdLock.uncommittedMembership(dataSource, person.userId(), HouseholdRole.OWNER)) {
+            lockHousehold = lock.householdId();
+            pending = submit(() -> accept(person, token).andReturn());
+            lock.awaitWaiting(1);
+            assertThat(pending.isDone()).as("커밋하지 않은 멤버십이 있는 동안 수락이 끝나면 안 된다").isFalse();
+
+            lock.rollback();
+        }
+        MvcResult result = pending.get(10, TimeUnit.SECONDS);
+
+        status().isNoContent().match(result);
+        assertThat(invitationStatuses(household)).containsExactly("수락");
+        assertThat(membershipOf()).isEqualTo(household + "|member");
+        assertThat(householdIds()).as("롤백된 연결의 가구 행은 남지 않는다").doesNotContain(lockHousehold);
+    }
+
+    private ResultActions accept(Person joiner, String token) throws Exception {
+        return mvc.perform(https(post("/api/v1/invitations/accept")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(joiner.cookie())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"token\": \"" + token + "\"}"));
+    }
+
+    /** 로그인 직후라 재인증 판정(5분)을 통과한다. */
+    private ResultActions issue(int days) throws Exception {
+        return mvc.perform(https(post("/api/v1/household/invitations")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(person.cookie())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"expiresInDays\": " + days + "}"));
+    }
+
+    private ResultActions revoke(long invitationId) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household/invitations/" + invitationId)).header(HttpHeaders.ORIGIN, ORIGIN)
+                .cookie(person.cookie()));
+    }
+
+    private List<String> invitationStatuses(long household) {
+        return jdbc.sql("select status from invitation where household_id = :h order by id").param("h", household).query(String.class).list();
     }
 
     private <T> Future<T> submit(Callable<T> task) {

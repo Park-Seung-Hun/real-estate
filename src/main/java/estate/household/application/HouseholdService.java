@@ -57,7 +57,7 @@ public class HouseholdService {
     }
 
     // 메시지 문장이 아니라 서버가 보낸 제약 필드로 읽어 DB 메시지 언어(lc_messages)와 관계없다. 키 값은 읽지 않는다
-    private static boolean isUserIdUnique(Throwable e) {
+    static boolean isUserIdUnique(Throwable e) {
         for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
             if (cause instanceof PSQLException psql && psql.getServerErrorMessage() != null) {
                 return USER_ID_UNIQUE.equals(psql.getServerErrorMessage().getConstraint());
