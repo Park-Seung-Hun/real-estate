@@ -65,6 +65,8 @@ function server(create: Outcome, afterCreate: Outcome = members) {
   return (call: ApiCall): Outcome | undefined => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return me
     if (call.method === 'GET' && call.path === '/api/v1/household') return created ? afterCreate : noHousehold
+    // owner 임시 첫 화면이 읽는 보낸 초대 목록(US2)
+    if (call.method === 'GET' && call.path === '/api/v1/household/invitations') return { status: 200, body: { invitations: [] } }
     if (call.method === 'POST' && call.path === '/api/v1/household') {
       created = true
       return create
@@ -98,7 +100,7 @@ describe('가구 만들기', () => {
     await settle()
     expect(postCalls()).toHaveLength(1)
     expect(listCalls()).toHaveLength(2)
-    expect(api.calls.map((c) => `${c.method} ${c.path}`).slice(-2)).toEqual(['POST /api/v1/household', 'GET /api/v1/household'])
+    expect(api.calls.filter((c) => c.path !== '/api/v1/household/invitations').map((c) => `${c.method} ${c.path}`).slice(-2)).toEqual(['POST /api/v1/household', 'GET /api/v1/household'])
     const body = document.body.textContent ?? ''
     expect(body).toContain('엄마')
     expect(body).toContain(SELF)

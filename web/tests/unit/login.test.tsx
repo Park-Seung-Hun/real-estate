@@ -32,7 +32,7 @@ import {
 
 const SERVICE_NAME = '서초댁 임장 기록'
 const LOGIN = 'Google 계정으로 로그인'
-const INVITE_GUIDE = '가족에게 받은 초대 링크로 들어왔다면 로그인하면 바로 수락됩니다.'
+const INVITE_GUIDE = '가족에게 받은 초대 링크로 들어왔다면 로그인한 뒤 들어갈 가구를 확인합니다.'
 const NO_HOUSEHOLD = '아직 가구가 없습니다.'
 const CREATE_GUIDE = '가족과 함께 볼 기록을 모으려면 가구를 만드세요.'
 const INVITE_LINK_GUIDE = '가족에게 받은 초대 링크가 있으면 그 링크를 여세요.'

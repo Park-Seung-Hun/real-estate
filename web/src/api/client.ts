@@ -55,3 +55,30 @@ export const getHousehold = async (): Promise<Members> => (await request('GET', 
 export const createHousehold = async (): Promise<void> => {
   await request('POST', '/api/v1/household')
 }
+
+// 로그인을 거치는 동안 초대 토큰을 두는 탭 저장소 키(research R7)
+export const INVITE_TOKEN_KEY = 'inviteToken'
+
+export type Invitation = { id: number; createdAt: string; expiresAt: string; remainingDays: number }
+export type CreatedInvitation = { id: number; token: string; createdAt: string; expiresAt: string }
+
+export const errorStatus = (error: unknown) => (error instanceof ApiError ? error.status : undefined)
+
+export const errorCode = (error: unknown) => (error instanceof ApiError ? error.code : undefined)
+
+export const previewInvitation = async (token: string): Promise<{ inviterDisplayName: string | null }> =>
+  (await request('POST', '/api/v1/invitations/preview', { token })).json()
+
+export const acceptInvitation = async (token: string): Promise<void> => {
+  await request('POST', '/api/v1/invitations/accept', { token })
+}
+
+export const listInvitations = async (): Promise<{ invitations: Invitation[] }> =>
+  (await request('GET', '/api/v1/household/invitations')).json()
+
+export const createInvitation = async (expiresInDays: number): Promise<CreatedInvitation> =>
+  (await request('POST', '/api/v1/household/invitations', { expiresInDays })).json()
+
+export const cancelInvitation = async (id: number): Promise<void> => {
+  await request('DELETE', `/api/v1/household/invitations/${id}`)
+}

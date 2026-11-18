@@ -7,6 +7,8 @@ export type ApiCall = {
   search: string
   credentials: RequestCredentials | undefined
   sameOrigin: boolean
+  /** 문자열 본문만 기록한다. 화면은 JSON.stringify한 문자열만 보낸다. */
+  body: string | undefined
 }
 
 export type Reply = { status: number; body?: unknown }
@@ -93,6 +95,7 @@ export function mockApi(handler: (call: ApiCall) => Reply | typeof networkError 
       search: url.search,
       credentials: init?.credentials ?? request?.credentials,
       sameOrigin: url.origin === window.location.origin,
+      body: typeof init?.body === 'string' ? init.body : undefined,
     }
     calls.push(call)
     const reply = handler(call)

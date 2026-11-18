@@ -57,6 +57,8 @@ function withList(...replies: Outcome[]) {
   return (call: ApiCall): Outcome | undefined => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return me
     if (call.method === 'GET' && call.path === '/api/v1/household') return replies.length > 1 ? replies.shift() : replies[0]
+    // owner 임시 첫 화면이 읽는 보낸 초대 목록(US2)
+    if (call.method === 'GET' && call.path === '/api/v1/household/invitations') return { status: 200, body: { invitations: [] } }
     return undefined
   }
 }

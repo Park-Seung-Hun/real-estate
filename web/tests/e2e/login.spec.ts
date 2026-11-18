@@ -26,7 +26,7 @@ async function loginWithFakeGoogle(page: Page) {
 test.describe('화면 폭 360px에서 가로 스크롤 없음', () => {
   test('로그인', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByText('가족에게 받은 초대 링크로 들어왔다면 로그인하면 바로 수락됩니다.')).toBeVisible()
+    await expect(page.getByText('가족에게 받은 초대 링크로 들어왔다면 로그인한 뒤 들어갈 가구를 확인합니다.')).toBeVisible()
     await expectNoHorizontalScroll(page)
   })
 
