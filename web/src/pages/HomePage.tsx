@@ -1,18 +1,62 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 import {
   cancelInvitation,
   createInvitation,
   errorCode,
   errorStatus,
   isNoHousehold,
+  isReauthRequired,
   isUnauthenticated,
   listInvitations,
+  removeMember,
 } from '../api/client'
 import type { Invitation, Member } from '../api/client'
 
 type Handlers = { onReload: () => void; onNoHousehold: () => void; onUnauthenticated: () => void }
+// 첫 화면의 안내는 하나만 보인다. 마지막 응답의 안내만 남는다(research R13)
+type Notice = 'inviteReauth' | 'removeReauth' | 'retry' | null
+type NoticeState = { notice: Notice; setNotice: (n: Notice) => void }
 
-export function HomePage({ members, onLogout, ...handlers }: { members: Member[]; onLogout: () => void } & Handlers) {
+export function HomePage({
+  members,
+  snapshot,
+  onLogout,
+  ...handlers
+}: { members: Member[]; snapshot: () => () => boolean; onLogout: () => void } & Handlers) {
+  const navigate = useNavigate()
+  const [notice, setNotice] = useState<Notice>(null)
+  const sending = useRef(false)
+  // 화면 안 안내는 화면이 남아 있을 때만 띄운다. 앱 상태 전환은 snapshot의 세대로 거른다.
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  const isOwner = members.some((m) => m.me && m.role === 'owner')
+
+  const onRemove = (userId: number) => {
+    if (sending.current) return
+    sending.current = true
+    setNotice(null)
+    const same = snapshot()
+    removeMember(userId).then(
+      () => {
+        sending.current = false
+        if (same()) handlers.onReload()
+      },
+      (error) => {
+        sending.current = false
+        if (isUnauthenticated(error)) same() && handlers.onUnauthenticated()
+        else if (isNoHousehold(error)) same() && handlers.onNoHousehold()
+        else if (errorStatus(error) === 404) same() && handlers.onReload()
+        else if (mounted.current) setNotice(isReauthRequired(error) ? 'removeReauth' : 'retry')
+      },
+    )
+  }
+
   return (
     <>
       <h2>함께 보는 사람</h2>
@@ -33,10 +77,20 @@ export function HomePage({ members, onLogout, ...handlers }: { members: Member[]
             )}
             {m.loginEmail}
             {!m.emailVerified && ' 검증되지 않음'}
+            {isOwner && !m.me && (
+              <button className="button" type="button" onClick={() => onRemove(m.userId)}>
+                제거
+              </button>
+            )}
+            {!isOwner && m.me && (
+              <button className="button" type="button" onClick={() => navigate('/household/leave')}>
+                가구 나가기
+              </button>
+            )}
           </li>
         ))}
       </ul>
-      {members.some((m) => m.me && m.role === 'owner') && <InvitationArea members={members} {...handlers} />}
+      {isOwner && <InvitationArea members={members} notice={notice} setNotice={setNotice} {...handlers} />}
       <button className="button" type="button" onClick={onLogout}>
         로그아웃
       </button>
@@ -51,13 +105,18 @@ const monthDay = (iso: string) => {
   return `${part('month')}월 ${part('day')}일`
 }
 
-function InvitationArea({ members, onReload, onNoHousehold, onUnauthenticated }: { members: Member[] } & Handlers) {
+function InvitationArea({
+  members,
+  notice,
+  setNotice,
+  onReload,
+  onNoHousehold,
+  onUnauthenticated,
+}: { members: Member[] } & NoticeState & Handlers) {
   const [invitations, setInvitations] = useState<Invitation[]>([])
   // 만든 직후의 링크. 이 컴포넌트의 상태에만 두고 어디에도 저장하지 않는다.
   const [link, setLink] = useState<{ id: number; url: string } | null>(null)
   const [days, setDays] = useState('3')
-  // 마지막 응답의 안내만 보인다(research R13)
-  const [notice, setNotice] = useState<'reauth' | 'retry' | null>(null)
   const sending = useRef(false)
   // 늦게 온 앞선 목록 응답이 발급이나 취소 결과, 더 나중 요청의 결과를 덮지 않게 요청마다 순번을 둔다.
   const latest = useRef(0)
@@ -102,7 +161,7 @@ function InvitationArea({ members, onReload, onNoHousehold, onUnauthenticated }:
       (error) => {
         sending.current = false
         if (errorStatus(error) === 409) reload()
-        else if (errorCode(error) === 'REAUTH_REQUIRED') setNotice('reauth')
+        else if (errorCode(error) === 'REAUTH_REQUIRED') setNotice('inviteReauth')
         else fail(error)
       },
     )
@@ -171,9 +230,13 @@ function InvitationArea({ members, onReload, onNoHousehold, onUnauthenticated }:
         </>
       )}
       {notice === 'retry' && <p>잠시 후 다시 시도해 주세요.</p>}
-      {notice === 'reauth' && (
+      {(notice === 'inviteReauth' || notice === 'removeReauth') && (
         <>
-          <p>초대 링크를 만들려면 구글 계정을 한 번 더 확인해야 합니다.</p>
+          <p>
+            {notice === 'inviteReauth'
+              ? '초대 링크를 만들려면 구글 계정을 한 번 더 확인해야 합니다.'
+              : '구성원을 제거하려면 구글 계정을 한 번 더 확인해야 합니다.'}
+          </p>
           <a className="button" href="/oauth2/authorization/google?purpose=reauth&returnTo=/">
             구글 계정 확인
           </a>

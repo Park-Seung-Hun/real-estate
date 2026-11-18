@@ -20,6 +20,13 @@
  *    -> "R7, FR-012: 로그인하지 않은 사람이 /invite#토큰을 열면 ..."
  * 6. "초대 발급의 재인증에서 돌아와도 발급을 자동으로 다시 보내지 않고 고른 만료 기간을 저장하지 않음"
  *    -> "FR-022, 결정 기록 0013: 발급 재인증에서 돌아와도 ..."
+ * 7. (T054) "구성원 제거의 재인증에서 돌아와도 제거 요청을 자동으로 다시 보내지 않고, 재인증 전후로 저장소, 화면 주소,
+ *    `returnTo`에 밀린 동작과 대상 번호가 없음"
+ *    -> "FR-022, 결정 기록 0013: 구성원 제거 재인증에서 돌아와도 ..."
+ *    공개 표면: owner 화면에서 다른 구성원 행의 "제거" 버튼을 누르면 확인 없이 DELETE /api/v1/household/members/{userId}
+ *    하나를 보내고, 401 REAUTH_REQUIRED면 안내 "구성원을 제거하려면 구글 계정을 한 번 더 확인해야 합니다."와
+ *    href가 정확히 /oauth2/authorization/google?purpose=reauth&returnTo=/ 인 "구글 계정 확인" 링크가 보인다.
+ *    대상 번호와 하려던 동작은 localStorage, sessionStorage, 주소(경로, 쿼리, #), returnTo, history.state 어디에도 남지 않는다.
  * 게이트 반영으로 더한 테스트는 이름이 "게이트"로 시작한다(같은 문서에서 다시 연 링크, 끝 슬래시, 로그인 끊김, 그 밖의 오류 뒤 삭제).
  * 재리뷰 반영 테스트는 이름이 "재리뷰"로 시작한다(이전 링크의 늦은 들어가기 응답이 새 링크를 건드리지 않음).
  * expectNoTokenLeak()은 콘솔(log, info, warn, error, debug)로 나간 인자와 history.state에도 토큰이 없는지 본다.
@@ -30,7 +37,7 @@
  * 기존 요소를 고치기만 하는 다시 그리기 사이에 주소가 바뀌는 경우는 잡지 못한다(첫 마운트에는 해당하지 않는다).
  * 재인증에서 돌아오는 것은 서버가 returnTo=/ 로 문서를 새로 여는 것이므로, 같은 탭(sessionStorage 유지)에서 /에 App을 새로 마운트해 흉내 낸다.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/App'
 import {
@@ -629,5 +636,116 @@ describe('발급 재인증 뒤 (FR-022, 결정 기록 0013, R14)', () => {
     await waitFor(() => expect(issueCalls()).toHaveLength(2))
     expect(JSON.parse(issueCalls()[1].body ?? 'null')).toEqual({ expiresInDays: 3 })
     await settle()
+  })
+})
+
+describe('구성원 제거 재인증 뒤 (FR-022, 결정 기록 0013, R14)', () => {
+  /** 흔하지 않은 대상 번호. 저장소, 주소, history.state, 링크, 콘솔 전체에서 이 숫자를 찾는다. */
+  const TARGET = 4242
+  const REMOVE = '제거'
+  const REMOVE_REAUTH_NOTICE = '구성원을 제거하려면 구글 계정을 한 번 더 확인해야 합니다.'
+  const REAUTH_HREF = '/oauth2/authorization/google?purpose=reauth&returnTo=/'
+  const OTHER_EMAIL = 'user2@example.com'
+
+  /** contracts/openapi.yaml Members 스키마 모양. 나는 owner이고 제거할 member의 userId가 TARGET이다. */
+  const twoMembers: Reply = {
+    status: 200,
+    body: {
+      members: [
+        { userId: 1, displayName: '엄마', role: 'owner', loginEmail: 'user1@example.com', emailVerified: true, me: true },
+        { userId: TARGET, displayName: '민지', role: 'member', loginEmail: OTHER_EMAIL, emailVerified: true, me: false },
+      ],
+    },
+  }
+
+  /** 재인증 전에는 제거가 401 REAUTH_REQUIRED, 재인증 뒤에는 204다(자동으로 다시 보내면 기록에 남는다). */
+  function removeServer() {
+    const state = { reauthed: false }
+    const handler = (call: ApiCall): Reply | undefined => {
+      const is = (method: string, path: string) => call.method === method && call.path === path
+      if (is('GET', '/api/v1/me')) return me
+      if (is('GET', '/api/v1/household')) return twoMembers
+      if (is('GET', '/api/v1/household/invitations')) return { status: 200, body: { invitations: [] } }
+      if (is('DELETE', `/api/v1/household/members/${TARGET}`)) return state.reauthed ? noContent : reauthRequired
+      return undefined
+    }
+    return { state, handler }
+  }
+
+  const removeCalls = () => api.calls.filter((c) => c.method === 'DELETE' && c.path.startsWith('/api/v1/household/members'))
+
+  /** 로그인 이메일 글자를 포함하는 구성원 행. */
+  const rowOf = (email: string) =>
+    waitFor(() => {
+      const row = screen.getAllByRole('listitem').find((item) => (item.textContent ?? '').includes(email))
+      if (!row) throw new Error(`${email} 행이 없다`)
+      return row
+    })
+
+  /**
+   * 제거 흐름이 브라우저에 아무것도 남기지 않았는지 본다. 저장소는 제거를 누르기 전 모습 그대로여야 하고(밀린 동작 없음),
+   * 대상 번호는 저장소, 주소, 쿠키, history.state, 링크, 콘솔 어디에도 없어야 한다.
+   */
+  function expectNoRemoveTrace(stored: { local: (readonly [string, string])[]; session: (readonly [string, string])[] }) {
+    const target = String(TARGET)
+    expect(entries(localStorage)).toEqual(stored.local)
+    expect(entries(sessionStorage)).toEqual(stored.session)
+    for (const storage of [localStorage, sessionStorage]) {
+      for (const [key, value] of entries(storage)) {
+        expect(key).not.toContain(target)
+        expect(value).not.toContain(target)
+      }
+    }
+    expectAddressClean('/')
+    expect(window.location.href).not.toContain(target)
+    expect(document.cookie).not.toContain(target)
+    expect(JSON.stringify(window.history.state) ?? '').not.toContain(target)
+    for (const link of document.querySelectorAll('a')) expect(link.getAttribute('href') ?? '').not.toContain(target)
+    for (const spy of consoleSpies) for (const args of spy.mock.calls) expect(args.map(printed).join(' ')).not.toContain(target)
+  }
+
+  it('FR-022, 결정 기록 0013: 구성원 제거 재인증에서 돌아와도 제거를 다시 보내지 않고, 대상 번호와 밀린 동작은 저장소, 주소, returnTo, history.state 어디에도 없다', async () => {
+    const { state, handler } = removeServer()
+    api = mockApi(handler)
+    openAt('/')
+    const row = await rowOf(OTHER_EMAIL)
+    await settle()
+    const stored = { local: entries(localStorage), session: entries(sessionStorage) }
+    const historyBefore = window.history.state
+    expect(removeCalls()).toEqual([])
+
+    fireEvent.click(within(row).getByRole('button', { name: REMOVE }))
+    await screen.findByText(REMOVE_REAUTH_NOTICE)
+    await settle()
+    // 확인 화면 없이 그 행의 userId로 본문 없는 요청 하나만 보냈다.
+    expect(removeCalls().map((c) => [c.path, c.search, c.body])).toEqual([
+      [`/api/v1/household/members/${TARGET}`, '', undefined],
+    ])
+    const href = screen.getByRole('link', { name: REAUTH }).getAttribute('href') ?? ''
+    expect(href).toBe(REAUTH_HREF)
+    const url = new URL(href, window.location.origin)
+    expect([...url.searchParams]).toEqual([
+      ['purpose', 'reauth'],
+      ['returnTo', '/'],
+    ])
+    // 재인증 링크를 누르기 전: 주소도 history.state도 제거를 누르기 전 그대로다.
+    expect(window.history.state).toEqual(historyBefore)
+    expectNoRemoveTrace(stored)
+
+    // 재인증을 마치고 같은 탭에서 문서를 새로 열어 /로 돌아온다.
+    cleanup()
+    state.reauthed = true
+    const removesBefore = removeCalls().length
+    const callsBefore = api.calls.length
+    openAt('/')
+    const again = await rowOf(OTHER_EMAIL)
+    await settle()
+    expect(api.calls.slice(callsBefore).some((c) => c.method === 'GET' && c.path === '/api/v1/me')).toBe(true)
+    expect(removeCalls()).toHaveLength(removesBefore)
+    expect(api.calls.slice(callsBefore).filter((c) => c.method === 'DELETE')).toEqual([])
+    expect(screen.queryByText(REMOVE_REAUTH_NOTICE)).toBeNull()
+    // 사용자가 같은 버튼을 다시 누를 수 있게 버튼은 그대로 있다.
+    within(again).getByRole('button', { name: REMOVE })
+    expectNoRemoveTrace(stored)
   })
 })

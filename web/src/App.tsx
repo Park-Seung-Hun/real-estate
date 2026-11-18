@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
 import {
   createHousehold,
@@ -11,6 +11,7 @@ import {
   logout,
 } from './api/client'
 import type { Member } from './api/client'
+import { LeaveHouseholdPage } from './pages/LeaveHouseholdPage'
 import { LoginFailedPage } from './pages/LoginFailedPage'
 import { HomePage } from './pages/HomePage'
 import { InvitePage } from './pages/InvitePage'
@@ -58,29 +59,56 @@ function Shell() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
+  // 로그인 없음이나 가구 없음으로 바꾸는 자리는 모두 세대를 올린다. 그 전에 보낸 요청의 늦은 응답은 앱 상태를 바꾸지 못한다.
+  const generation = useRef(0)
+  const snapshot = () => {
+    const started = generation.current
+    return () => started === generation.current
+  }
+
   // 가구 요청이 403 NO_HOUSEHOLD를 받으면 가구 없음 화면으로 간다(FR-019). 이후 가구 화면이 같은 함수를 쓴다.
   const onNoHousehold = () => {
+    generation.current++
     setSession('noHousehold')
     navigate('/')
   }
 
+  const goAnonymous = () => {
+    generation.current++
+    setSession('anonymous')
+  }
+
   // 목록을 읽어 가구 있음이나 가구 없음으로 정한다. 호출한 쪽이 이미 사라졌으면 active로 건너뛴다.
   // 첫 조회의 403은 경로를 그대로 둔다(가구 없는 사람이 /withdraw를 새로 열 수 있게). 화면을 그린 뒤의 403만 /로 보낸다(FR-019).
-  const loadHousehold = (active: () => boolean = () => true, onMissing = () => setSession('noHousehold')) =>
-    getHousehold().then(
+  const loadHousehold = (
+    active: () => boolean = () => true,
+    onMissing = () => {
+      generation.current++
+      setSession('noHousehold')
+    },
+  ) => {
+    const same = snapshot()
+    const current = () => active() && same()
+    return getHousehold().then(
       (list) => {
-        if (!active()) return
+        if (!current()) return
         setMembers(list.members)
         setSession('household')
       },
-      (error) => active() && (isNoHousehold(error) ? onMissing() : setSession('error')),
+      (error) => {
+        if (!current()) return
+        if (isUnauthenticated(error)) goAnonymous()
+        else if (isNoHousehold(error)) onMissing()
+        else setSession('error')
+      },
     )
+  }
 
   useEffect(() => {
     let active = true
     getMe().then(
       () => loadHousehold(() => active),
-      (error) => active && setSession(isUnauthenticated(error) ? 'anonymous' : 'error'),
+      (error) => active && (isUnauthenticated(error) ? goAnonymous() : setSession('error')),
     )
     return () => {
       active = false
@@ -92,13 +120,13 @@ function Shell() {
     setAttempt((n) => n + 1)
   }
 
-  const onUnauthenticated = () => setSession('anonymous')
+  const onUnauthenticated = goAnonymous
 
   // 401이면 로그인 화면, 그 밖의 오류는 지금 화면을 그대로 둔다.
   const onLogout = () =>
     logout().then(
-      () => setSession('anonymous'),
-      (error) => isUnauthenticated(error) && setSession('anonymous'),
+      goAnonymous,
+      (error) => isUnauthenticated(error) && goAnonymous(),
     )
 
   // 409 HAS_HOUSEHOLD는 다른 탭에서 이미 만든 것이므로 목록을 다시 읽는다.
@@ -108,13 +136,16 @@ function Shell() {
       (error) =>
         isHasHousehold(error)
           ? loadHousehold(undefined, onNoHousehold)
-          : setSession(isUnauthenticated(error) ? 'anonymous' : 'error'),
+          : isUnauthenticated(error)
+            ? goAnonymous()
+            : setSession('error'),
     )
 
   const home =
     session === 'household' ? (
       <HomePage
         members={members}
+        snapshot={snapshot}
         onLogout={onLogout}
         onReload={() => loadHousehold(undefined, onNoHousehold)}
         onNoHousehold={onNoHousehold}
@@ -141,10 +172,20 @@ function Shell() {
       <Routes>
         <Route path="/login-failed" element={<LoginFailedPage />} />
         <Route path="/reauth-failed" element={<ReauthFailedPage />} />
-        <Route path="/withdraw" element={loggedIn ? <WithdrawPage onGone={() => setSession('anonymous')} /> : home} />
+        <Route path="/withdraw" element={loggedIn ? <WithdrawPage onGone={goAnonymous} /> : home} />
         <Route
           path="/invite"
           element={loggedIn ? <InvitePage key={inviteKey} onJoined={onJoined} onUnauthenticated={onUnauthenticated} /> : home}
+        />
+        <Route
+          path="/household/leave"
+          element={
+            session === 'household' && members.some((m) => m.me && m.role === 'member') ? (
+              <LeaveHouseholdPage snapshot={snapshot} onLeft={onNoHousehold} onUnauthenticated={onUnauthenticated} />
+            ) : (
+              home
+            )
+          }
         />
         <Route path="*" element={home} />
       </Routes>

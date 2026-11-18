@@ -82,3 +82,11 @@ export const createInvitation = async (expiresInDays: number): Promise<CreatedIn
 export const cancelInvitation = async (id: number): Promise<void> => {
   await request('DELETE', `/api/v1/household/invitations/${id}`)
 }
+
+export const removeMember = async (userId: number): Promise<void> => {
+  await request('DELETE', `/api/v1/household/members/${userId}`)
+}
+
+export const leaveHousehold = async (): Promise<void> => {
+  await request('DELETE', '/api/v1/household/membership')
+}
