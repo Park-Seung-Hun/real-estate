@@ -10,3 +10,9 @@ spring:
 estate:
   web:
     allowed-origins: http://localhost:8080
+  collector:
+    raw:
+      # compose.yaml의 garage와 compose/garage.toml의 로컬 전용 기본값
+      endpoint: ${ESTATE_RAW_S3_ENDPOINT:http://localhost:3900}
+      region: ${ESTATE_RAW_S3_REGION:garage}
+      bucket: ${ESTATE_RAW_S3_BUCKET:estate-raw}

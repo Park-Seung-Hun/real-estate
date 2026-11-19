@@ -1,0 +1,15 @@
+# 로컬 개발과 테스트 전용 Garage 설정. 아래 비밀값은 공개 저장소에 올라가는 가짜 값이며 운영에 쓰지 않는다.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+# 노드 하나뿐이라 복제하지 않는다
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+# 로컬 전용 가짜 값
+rpc_secret = "0000000000000000000000000000000000000000000000000000000000000001"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"

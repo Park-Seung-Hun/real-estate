@@ -24,6 +24,14 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.postgresql:postgresql")
 
+    // 원본 응답 파일 저장(S3 호환). HTTP 클라이언트는 JDK 기반 하나만 쓴다
+    implementation(platform("software.amazon.awssdk:bom:2.59.4"))
+    implementation("software.amazon.awssdk:s3") {
+        exclude(group = "software.amazon.awssdk", module = "apache-client")
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
+    implementation("software.amazon.awssdk:url-connection-client")
+
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-session-jdbc")
