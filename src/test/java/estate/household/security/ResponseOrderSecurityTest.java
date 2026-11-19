@@ -376,6 +376,84 @@ class ResponseOrderSecurityTest {
         assertThat(membershipCount(world.memberA())).isZero();
     }
 
+    @Test
+    @DisplayName("T061 B2 US1-6 FR-026: 멤버십 없는 사람의 DELETE /api/v1/household는 403 NO_HOUSEHOLD이고 다른 가구의 행이 그대로이며, 가구를 만든 뒤에는 204")
+    void deleteWithoutMembershipIsNoHousehold() throws Exception {
+        Households.World world = households.world();
+        households.invite(world.ownerB(), 3);
+        Person loner = world.loner();
+        String beforeHouseholds = householdIds();
+        String beforeMembers = memberships();
+        String beforeInvitations = invitations();
+
+        expectExactProblem(deleteHousehold(loner, ORIGIN), 403, NO_HOUSEHOLD);
+
+        assertThat(householdIds()).isEqualTo(beforeHouseholds);
+        assertThat(memberships()).isEqualTo(beforeMembers);
+        assertThat(invitations()).isEqualTo(beforeInvitations);
+
+        long own = households.createHousehold(loner);
+        deleteHousehold(loner, ORIGIN).andExpect(status().isNoContent());
+        assertThat(householdIds()).isEqualTo(beforeHouseholds).doesNotContain(String.valueOf(own));
+        assertThat(membershipCount(loner)).isZero();
+    }
+
+    @Test
+    @DisplayName("T061 B2 US4-6 FR-023: 마지막 구글 인증이 오래된 member의 가구 삭제는 401이 아니라 403 PERMISSION_DENIED이고 가구, 멤버십, 초대가 그대로다")
+    void staleMemberDeleteIsPermissionDenied() throws Exception {
+        Instant authAt = frozenNow();
+        Households.World world = households.world();
+        Instant now = clock.instant();
+        // 구성원 둘이면서 대기 초대가 있는 상태는 API로 만들 수 없어 SQL로 넣는다
+        households.insertInvitation(world.householdA(), world.ownerA().userId(), "대기", now, now.plus(Duration.ofDays(3)));
+        String beforeHouseholds = householdIds();
+        String beforeMembers = memberships();
+        String beforeInvitations = invitations();
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(10)));
+
+        expectExactProblem(deleteHousehold(world.memberA(), ORIGIN), 403, PERMISSION_DENIED);
+
+        assertThat(householdIds()).isEqualTo(beforeHouseholds).contains(String.valueOf(world.householdA()));
+        assertThat(memberships()).isEqualTo(beforeMembers);
+        assertThat(invitations()).isEqualTo(beforeInvitations);
+        // 짝: 같은 시각 owner는 재인증 단계에서 401, 5분 안이면 204
+        expectExactProblem(deleteHousehold(world.ownerA(), ORIGIN), 401, REAUTH_REQUIRED);
+        assertThat(householdIds()).isEqualTo(beforeHouseholds);
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(4)));
+        deleteHousehold(world.ownerA(), ORIGIN).andExpect(status().isNoContent());
+        assertThat(householdIds()).isEqualTo(String.valueOf(world.householdB()));
+    }
+
+    @Test
+    @DisplayName("T061 B2 FR-023: 허용 밖 Origin의 가구 삭제는 owner, member, 가구 없는 사람 모두 403 ORIGIN_REJECTED이고 가구, 멤버십, 초대가 그대로이며, 허용 Origin이면 204")
+    void foreignOriginDeleteRejected() throws Exception {
+        Households.World world = households.world();
+        households.invite(world.ownerB(), 3);
+        String beforeHouseholds = householdIds();
+        String beforeMembers = memberships();
+        String beforeInvitations = invitations();
+
+        expectExactProblem(deleteHousehold(world.ownerA(), FOREIGN_ORIGIN), 403, ORIGIN_REJECTED);
+        expectExactProblem(deleteHousehold(world.memberA(), FOREIGN_ORIGIN), 403, ORIGIN_REJECTED);
+        expectExactProblem(deleteHousehold(world.loner(), FOREIGN_ORIGIN), 403, ORIGIN_REJECTED);
+
+        assertThat(householdIds()).isEqualTo(beforeHouseholds).contains(String.valueOf(world.householdA()));
+        assertThat(memberships()).isEqualTo(beforeMembers);
+        assertThat(invitations()).isEqualTo(beforeInvitations);
+
+        deleteHousehold(world.ownerA(), ORIGIN).andExpect(status().isNoContent());
+        assertThat(householdIds()).isEqualTo(String.valueOf(world.householdB()));
+    }
+
+    private ResultActions deleteHousehold(Person person, String origin) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household")).header(HttpHeaders.ORIGIN, origin).cookie(person.cookie()));
+    }
+
+    /** 모든 가구 번호. */
+    private String householdIds() {
+        return String.join(",", jdbc.sql("select id::text from household order by id").query(String.class).list());
+    }
+
     private ResultActions removeMember(Person person, String origin, String userId) throws Exception {
         return mvc.perform(https(delete("/api/v1/household/members/" + userId)).header(HttpHeaders.ORIGIN, origin)
                 .cookie(person.cookie()));

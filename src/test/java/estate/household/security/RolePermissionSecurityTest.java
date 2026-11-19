@@ -114,6 +114,43 @@ class RolePermissionSecurityTest {
                 .contains(world.householdA() + "|" + world.ownerA().userId() + "|owner");
     }
 
+    @Test
+    @DisplayName("T067 B11 US4-6 FR-025: member의 가구 삭제(인증 5분 안)는 403 PERMISSION_DENIED이고 가구, 멤버십, 초대가 그대로이며, 같은 가구 owner의 삭제는 204")
+    void memberCannotDeleteHousehold() throws Exception {
+        Instant authAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        clock.freezeAt(authAt);
+        Households households = new Households(mvc, jdbc, sessions);
+        Households.World world = households.world();
+        // 구성원 둘이면서 대기 초대가 있는 상태는 API로 만들 수 없어 SQL로 넣는다
+        long pending = households.insertInvitation(world.householdA(), world.ownerA().userId(), "대기",
+                authAt, authAt.plus(Duration.ofDays(3))).id();
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(1)));
+        String beforeHouseholds = householdIds();
+        String beforeMembers = memberships();
+        String beforeInvitations = invitations();
+
+        expectExactProblem(deleteHousehold(world.memberA()), 403, PERMISSION_DENIED);
+
+        assertThat(householdIds()).as("가구 A와 B가 그대로").isEqualTo(beforeHouseholds)
+                .isEqualTo(world.householdA() + "," + world.householdB());
+        assertThat(memberships()).as("멤버십이 그대로(가구 A의 owner와 member)").isEqualTo(beforeMembers)
+                .contains(world.householdA() + "|" + world.memberA().userId() + "|member");
+        assertThat(invitations()).as("초대가 그대로(대기 초대 포함)").isEqualTo(beforeInvitations).contains(pending + "|대기|");
+
+        // 짝: 같은 가구 owner는 권한 단계를 통과해 가구를 삭제한다
+        deleteHousehold(world.ownerA()).andExpect(status().isNoContent());
+        assertThat(householdIds()).isEqualTo(String.valueOf(world.householdB()));
+    }
+
+    private ResultActions deleteHousehold(Person person) throws Exception {
+        return mvc.perform(https(delete("/api/v1/household")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(person.cookie()));
+    }
+
+    /** 모든 가구 번호. */
+    private String householdIds() {
+        return String.join(",", jdbc.sql("select id::text from household order by id").query(String.class).list());
+    }
+
     private ResultActions remove(Person person, Person target) throws Exception {
         return mvc.perform(https(delete("/api/v1/household/members/" + target.userId())).header(HttpHeaders.ORIGIN, ORIGIN)
                 .cookie(person.cookie()));

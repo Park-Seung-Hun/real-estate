@@ -116,6 +116,20 @@ class MembershipRecheckSecurityTest {
         mvc.perform(getAs("/api/v1/household", world.ownerA())).andExpect(status().isOk());
     }
 
+    @Test
+    @DisplayName("T063 B4 US4-4 FR-019 SC-004: owner가 가구를 삭제하면 owner였던 사람과 member였던 사람이 같은 쿠키로 보낸 다음 GET /api/v1/household가 403 NO_HOUSEHOLD이고 두 세션 행이 남는다")
+    void deletedHouseholdRejectsFormerMembers() throws Exception {
+        World world = new Households(mvc, jdbc, sessions).world();
+        mvc.perform(getAs("/api/v1/household", world.ownerA())).andExpect(status().isOk());
+        mvc.perform(getAs("/api/v1/household", world.memberA())).andExpect(status().isOk());
+
+        mvc.perform(deleteAs("/api/v1/household", world.ownerA())).andExpect(status().isNoContent());
+
+        expectNoHouseholdWithSession(world.ownerA());
+        expectNoHouseholdWithSession(world.memberA());
+        mvc.perform(getAs("/api/v1/household", world.ownerB())).andExpect(status().isOk());
+    }
+
     /** 같은 쿠키의 다음 가구 요청이 401이 아니라 403 NO_HOUSEHOLD이고, 그 쿠키의 세션 행이 그 사람의 것으로 남아 있다. */
     private void expectNoHouseholdWithSession(Person person) throws Exception {
         String sessionId = SessionRows.idOfCookie(person.cookie().getValue());

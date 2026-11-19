@@ -34,6 +34,7 @@ import tools.jackson.databind.ObjectMapper;
 import estate.support.Households;
 import estate.support.LoginClient;
 import estate.support.LoginIntegrationTest;
+import estate.support.MutableClock;
 import estate.support.RealServerClient;
 import estate.support.SessionRows;
 
@@ -58,6 +59,13 @@ class HouseholdErrorBodyServerTest {
              "detail": "가구를 나가거나 삭제한 뒤 다시 시도해 주세요.", "code": "HAS_HOUSEHOLD"}""";
 
     // T038(US2 몫): contracts/openapi.yaml의 예시
+    static final String PERMISSION_DENIED = """
+            {"type": "https://example.com/problems/permission-denied", "title": "할 수 없는 동작입니다", "status": 403,
+             "detail": "이 가구에서 할 수 없는 동작입니다.", "code": "PERMISSION_DENIED"}""";
+    static final String REAUTH_REQUIRED = """
+            {"type": "https://example.com/problems/reauth-required", "title": "구글 계정 확인이 필요합니다", "status": 401,
+             "detail": "구글 계정을 한 번 더 확인한 뒤 다시 시도해 주세요.", "code": "REAUTH_REQUIRED"}""";
+
     static final String INVITATION_REVOKED = """
             {"type": "https://example.com/problems/invitation-revoked", "title": "취소된 초대 링크입니다", "status": 409,
              "detail": "가족에게 새 초대 링크를 받아 주세요.", "code": "INVITATION_REVOKED"}""";
@@ -98,6 +106,8 @@ class HouseholdErrorBodyServerTest {
     JdbcClient jdbc;
     @Autowired
     SessionRows sessions;
+    @Autowired
+    MutableClock clock;
 
     private RealServerClient server;
     private Households households;
@@ -249,6 +259,57 @@ class HouseholdErrorBodyServerTest {
         JsonNode real = expectExactProblem(response, 403, NO_HOUSEHOLD);
         MvcResult mock = mvc.perform(https(get("/api/v1/household")).cookie(cookie(joiner))).andReturn();
         assertThat(mock.getResponse().getStatus()).isEqualTo(403);
+        assertThat(JSON.readTree(mock.getResponse().getContentAsString(StandardCharsets.UTF_8))).as("MockMvc 본문과 같다").isEqualTo(real);
+    }
+
+    @Test
+    @DisplayName("T070 US4-7 SC-008 실서버: 가구가 있는 owner와 member의 DELETE /api/v1/me는 409 HAS_HOUSEHOLD problem+json이고 계약 예시, MockMvc 본문과 같으며 멤버십은 그대로다")
+    void withdrawHasHouseholdOnRealServer() throws Exception {
+        String owner = server.login();
+        assertThat(create(owner).statusCode()).isEqualTo(201);
+        String member = server.login();
+        assertThat(postToken(member, "/api/v1/invitations/accept", issue(owner).path("token").stringValue()).statusCode()).isEqualTo(204);
+
+        for (String session : new String[] {owner, member}) {
+            assertSameDelete(session, "/api/v1/me", 409, HAS_HOUSEHOLD);
+        }
+        assertThat(jdbcCount("household_member")).as("멤버십이 그대로").isEqualTo(2);
+        assertThat(jdbc.sql("select count(*) from \"user\" where id in (:ids)").param("ids", List.of(userIdOf(owner), userIdOf(member)))
+                .query(Long.class).single()).as("사용자 행이 그대로").isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("T070 US4-6 FR-020 실서버: member의 DELETE /api/v1/household는 403 PERMISSION_DENIED problem+json이고 계약 예시, MockMvc 본문과 같으며 가구는 그대로다")
+    void memberDeleteDeniedOnRealServer() throws Exception {
+        String owner = server.login();
+        assertThat(create(owner).statusCode()).isEqualTo(201);
+        String member = server.login();
+        assertThat(postToken(member, "/api/v1/invitations/accept", issue(owner).path("token").stringValue()).statusCode()).isEqualTo(204);
+
+        assertSameDelete(member, "/api/v1/household", 403, PERMISSION_DENIED);
+
+        assertThat(jdbcCount("household")).as("가구가 그대로").isEqualTo(1);
+        assertThat(jdbcCount("household_member")).as("멤버십이 그대로").isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("T070 US4-3 FR-022 실서버: 마지막 구글 인증이 5분 1초 전인 owner의 DELETE /api/v1/household는 401 REAUTH_REQUIRED problem+json이고 계약 예시, MockMvc 본문과 같으며 가구는 그대로다")
+    void staleOwnerDeleteReauthOnRealServer() throws Exception {
+        String owner = server.login();
+        assertThat(create(owner).statusCode()).isEqualTo(201);
+        clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+
+        assertSameDelete(owner, "/api/v1/household", 401, REAUTH_REQUIRED);
+
+        assertThat(jdbcCount("household")).as("가구가 그대로").isEqualTo(1);
+        assertThat(jdbcCount("household_member")).as("멤버십이 그대로").isEqualTo(1);
+    }
+
+    /** 실제 서버의 DELETE 응답이 계약 예시와 같고, 같은 세션 쿠키의 MockMvc 응답 본문과 같다. */
+    private void assertSameDelete(String session, String path, int status, String expectedJson) throws Exception {
+        JsonNode real = expectExactProblem(sendJson("DELETE", session, path, null), status, expectedJson);
+        MvcResult mock = mvc.perform(https(delete(path)).header(HttpHeaders.ORIGIN, ORIGIN).cookie(cookie(session))).andReturn();
+        assertThat(mock.getResponse().getStatus()).as(path).isEqualTo(status);
         assertThat(JSON.readTree(mock.getResponse().getContentAsString(StandardCharsets.UTF_8))).as("MockMvc 본문과 같다").isEqualTo(real);
     }
 

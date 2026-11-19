@@ -19,8 +19,9 @@ import estate.household.domain.HouseholdMember;
 import estate.household.domain.HouseholdMemberRepository;
 import estate.household.domain.HouseholdRepository;
 import estate.household.domain.HouseholdRole;
+import estate.household.domain.InvitationRepository;
 
-/** 가구 만들기, 구성원 조회, 구성원 제거, 가구 나가기(research R3, R9, R10). */
+/** 가구 만들기, 구성원 조회, 구성원 제거, 가구 나가기, 가구 삭제(research R3, R9, R10). */
 @Service
 public class HouseholdService {
 
@@ -28,14 +29,16 @@ public class HouseholdService {
 
     private final HouseholdRepository households;
     private final HouseholdMemberRepository members;
+    private final InvitationRepository invitations;
     private final HouseholdLocks locks;
     private final ReauthJudge reauthJudge;
     private final Clock clock;
 
-    HouseholdService(HouseholdRepository households, HouseholdMemberRepository members, HouseholdLocks locks,
-            ReauthJudge reauthJudge, Clock clock) {
+    HouseholdService(HouseholdRepository households, HouseholdMemberRepository members,
+            InvitationRepository invitations, HouseholdLocks locks, ReauthJudge reauthJudge, Clock clock) {
         this.households = households;
         this.members = members;
+        this.invitations = invitations;
         this.locks = locks;
         this.reauthJudge = reauthJudge;
         this.clock = clock;
@@ -68,6 +71,10 @@ public class HouseholdService {
     public void removeMember(long householdId, long userId, Instant lastGoogleAuthAt, String targetUserId) {
         long target = PathIds.parse(targetUserId);
         if (!members.existsByHouseholdIdAndUserId(householdId, target)) {
+            // 권한 확인기가 읽은 뒤 가구가 삭제되었으면 404가 아니라 403 NO_HOUSEHOLD(research R3)
+            if (!households.existsById(householdId)) {
+                throw new ProblemException(ProblemCode.NO_HOUSEHOLD);
+            }
             throw new ProblemException(ProblemCode.NOT_FOUND);
         }
         if (target == userId) {
@@ -89,6 +96,17 @@ public class HouseholdService {
         if (members.deleteMembership(householdId, userId) == 0) {
             throw new ProblemException(ProblemCode.NO_HOUSEHOLD);
         }
+    }
+
+    /** 재인증, 가구 행 잠금, 초대, 멤버십, 가구 순 삭제. 사용자 행과 세션은 남긴다(research R10). */
+    @Transactional
+    public void deleteHousehold(long householdId, Instant lastGoogleAuthAt) {
+        reauthJudge.require(lastGoogleAuthAt);
+        lock(householdId);
+        // 004 관심 단지, 매물, 호가 이력. 007 임장 기록, 체크리스트 항목. 008 사진. 010 방문 알림 발송 기록: 그 가구의 행 삭제를 여기(잠금 뒤, 초대 삭제 앞)에 더한다(research R10)
+        invitations.deleteAllByHousehold(householdId);
+        members.deleteAllByHousehold(householdId);
+        households.deleteHousehold(householdId);
     }
 
     // 잠금 전에 가구가 삭제되었으면 빈 결과라 403 NO_HOUSEHOLD(research R3)

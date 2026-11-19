@@ -11,6 +11,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
+import jakarta.servlet.http.Cookie;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,8 +24,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import estate.support.GoogleAccount;
 import estate.support.Households;
 import estate.support.Households.Person;
+import estate.support.LoginClient;
 import estate.support.LoginIntegrationTest;
 import estate.support.MutableClock;
 import estate.support.SessionRows;
@@ -177,6 +181,86 @@ class HouseholdReauthSecurityTest {
                 .andExpect(status().isNoContent());
 
         assertThat(memberships()).isEqualTo(owner.userId() + "|owner");
+    }
+
+    @Test
+    @DisplayName("T062 B3 US4-3 FR-022 SC-005: 마지막 구글 인증이 정확히 5분 전이면 가구 삭제가 204이고 가구, 멤버십, 초대 행이 없어진다(경계는 허용 쪽)")
+    void exactlyFiveMinutesDeletes() throws Exception {
+        households.addMember(owner);
+        assertThat(householdRows()).contains("|member", "|수락");
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(5)));
+
+        deleteHousehold().andExpect(status().isNoContent());
+
+        assertThat(householdRows()).isEqualTo(";;");
+    }
+
+    @Test
+    @DisplayName("T062 B3 US4-3 FR-022 SC-005: 마지막 구글 인증이 5분 1초 전이면 가구 삭제가 401 REAUTH_REQUIRED이고 가구, 멤버십, 초대가 그대로다")
+    void fiveMinutesOneSecondDeleteIsReauth() throws Exception {
+        households.addMember(owner);
+        String before = householdRows();
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(5)).plusSeconds(1));
+
+        expectExactProblem(deleteHousehold(), 401, REAUTH_REQUIRED);
+        assertThat(householdRows()).isEqualTo(before).contains("|member", "|수락");
+
+        // 짝: 같은 세션이 5분 안으로 돌아오면 같은 요청이 204
+        clock.freezeAt(authAt.plus(Duration.ofMinutes(4)));
+        deleteHousehold().andExpect(status().isNoContent());
+        assertThat(householdRows()).isEqualTo(";;");
+    }
+
+    @Test
+    @DisplayName("T062 B3 FR-022: 마지막 구글 인증이 현재 시각보다 61초 미래면 가구 삭제가 401 REAUTH_REQUIRED이고 가구, 멤버십, 초대가 그대로다")
+    void sixtyOneSecondsInFutureDeleteIsReauth() throws Exception {
+        households.addMember(owner);
+        String before = householdRows();
+        clock.freezeAt(authAt.minusSeconds(61));
+
+        expectExactProblem(deleteHousehold(), 401, REAUTH_REQUIRED);
+
+        assertThat(householdRows()).isEqualTo(before).contains("|member", "|수락");
+    }
+
+    @Test
+    @DisplayName("T062 B3 FR-022 Edge Cases: 재인증 한 번 뒤 5분 안에 구성원 제거, 초대 발급, 가구 삭제가 각각 재인증 없이 처리된다(재인증 전에는 셋 다 401)")
+    void oneReauthCoversThreeActions() throws Exception {
+        Person member = households.addMember(owner);
+        Instant reauthAt = authAt.plus(Duration.ofMinutes(10));
+        clock.freezeAt(reauthAt);
+        String before = householdRows();
+        expectExactProblem(remove(member), 401, REAUTH_REQUIRED);
+        expectExactProblem(issue(), 401, REAUTH_REQUIRED);
+        expectExactProblem(deleteHousehold(), 401, REAUTH_REQUIRED);
+        assertThat(householdRows()).isEqualTo(before);
+
+        String sub = jdbc.sql("select provider_subject from \"user\" where id = :u").param("u", owner.userId())
+                .query(String.class).single();
+        // Households.newPerson은 이메일을 sub + "@example.com"으로 만든다
+        Cookie reauthed = new LoginClient(mvc).login(GoogleAccount.of(sub, sub + "@example.com"), "/household/delete", "reauth",
+                owner.cookie()).requireSessionCookie();
+        owner = new Person(reauthed, owner.userId());
+
+        clock.freezeAt(reauthAt.plus(Duration.ofMinutes(1)));
+        remove(member).andExpect(status().isNoContent());
+        assertThat(memberships()).isEqualTo(owner.userId() + "|owner");
+        clock.freezeAt(reauthAt.plus(Duration.ofMinutes(2)));
+        issue().andExpect(status().isCreated());
+        clock.freezeAt(reauthAt.plus(Duration.ofMinutes(3)));
+        deleteHousehold().andExpect(status().isNoContent());
+        assertThat(householdRows()).isEqualTo(";;");
+    }
+
+    private ResultActions deleteHousehold() throws Exception {
+        return mvc.perform(https(delete("/api/v1/household")).header(HttpHeaders.ORIGIN, ORIGIN).cookie(owner.cookie()));
+    }
+
+    /** 가구 번호, 멤버십(사용자 번호, 역할), 초대(번호, 상태)를 ;로 이은 값. 가구 삭제 뒤에는 ";;"이다. */
+    private String householdRows() {
+        return String.join(",", jdbc.sql("select id::text from household order by id").query(String.class).list()) + ";"
+                + memberships() + ";"
+                + String.join(",", jdbc.sql("select id || '|' || status from invitation order by id").query(String.class).list());
     }
 
     /** owner가 이 사람을 구성원 제거로 요청한다. */

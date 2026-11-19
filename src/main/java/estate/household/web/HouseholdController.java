@@ -63,6 +63,13 @@ class HouseholdController {
         service.removeMember(membership.householdId(), membership.userId(), login.lastGoogleAuthAt(), userId);
     }
 
+    @DeleteMapping("/api/v1/household")
+    @Access(Permission.HOUSEHOLD_DELETE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void delete(HouseholdMembership membership, SessionLoginInfo login) {
+        service.deleteHousehold(membership.householdId(), login.lastGoogleAuthAt());
+    }
+
     @DeleteMapping("/api/v1/household/membership")
     @Access(Permission.MEMBER_LEAVE)
     @ResponseStatus(HttpStatus.NO_CONTENT)

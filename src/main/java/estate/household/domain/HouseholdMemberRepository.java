@@ -20,6 +20,14 @@ public interface HouseholdMemberRepository extends JpaRepository<HouseholdMember
     /** 엔티티를 읽지 않는 존재 확인: 잠금 전에 읽으면 1차 캐시에 남아 잠금 뒤 읽기가 옛 상태를 돌려준다. */
     boolean existsByHouseholdIdAndUserId(long householdId, long userId);
 
+    /** 엔티티를 읽지 않는 존재 확인(탈퇴의 잠금 뒤 재확인). */
+    boolean existsByUserId(long userId);
+
+    /** 가구의 멤버십 행을 모두 지운 건수. */
+    @Modifying
+    @Query("delete from HouseholdMember m where m.householdId = :householdId")
+    int deleteAllByHousehold(@Param("householdId") long householdId);
+
     /** 멤버십 행 하나만 지운 건수. */
     @Modifying
     @Query("delete from HouseholdMember m where m.householdId = :householdId and m.userId = :userId")
