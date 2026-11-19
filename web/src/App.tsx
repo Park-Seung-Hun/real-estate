@@ -11,6 +11,7 @@ import {
   logout,
 } from './api/client'
 import type { Member } from './api/client'
+import { DeleteHouseholdPage } from './pages/DeleteHouseholdPage'
 import { LeaveHouseholdPage } from './pages/LeaveHouseholdPage'
 import { LoginFailedPage } from './pages/LoginFailedPage'
 import { HomePage } from './pages/HomePage'
@@ -182,6 +183,21 @@ function Shell() {
           element={
             session === 'household' && members.some((m) => m.me && m.role === 'member') ? (
               <LeaveHouseholdPage snapshot={snapshot} onLeft={onNoHousehold} onUnauthenticated={onUnauthenticated} />
+            ) : (
+              home
+            )
+          }
+        />
+        <Route
+          path="/household/delete"
+          element={
+            session === 'household' && members.some((m) => m.me && m.role === 'owner') ? (
+              <DeleteHouseholdPage
+                memberCount={members.length}
+                snapshot={snapshot}
+                onDeleted={onNoHousehold}
+                onUnauthenticated={onUnauthenticated}
+              />
             ) : (
               home
             )

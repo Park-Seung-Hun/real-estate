@@ -90,3 +90,7 @@ export const removeMember = async (userId: number): Promise<void> => {
 export const leaveHousehold = async (): Promise<void> => {
   await request('DELETE', '/api/v1/household/membership')
 }
+
+export const deleteHousehold = async (): Promise<void> => {
+  await request('DELETE', '/api/v1/household')
+}

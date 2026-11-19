@@ -27,6 +27,16 @@
  *    하나를 보내고, 401 REAUTH_REQUIRED면 안내 "구성원을 제거하려면 구글 계정을 한 번 더 확인해야 합니다."와
  *    href가 정확히 /oauth2/authorization/google?purpose=reauth&returnTo=/ 인 "구글 계정 확인" 링크가 보인다.
  *    대상 번호와 하려던 동작은 localStorage, sessionStorage, 주소(경로, 쿼리, #), returnTo, history.state 어디에도 남지 않는다.
+ * 8. (T068) "가구 삭제의 재인증에서 `/household/delete`로 돌아와도 삭제 요청을 자동으로 다시 보내지 않고, 브라우저 저장소와
+ *    주소에 밀린 동작이 없음"
+ *    -> "US4-3, FR-022, 결정 기록 0013: 가구 삭제 재인증에서 /household/delete로 돌아와도 ..."
+ *    공개 표면: owner 첫 화면의 "가구 삭제" 버튼은 요청 없이 /household/delete 확인 화면으로 간다. 확인 화면은 안내
+ *    "가구를 삭제하면 가구, 구성원 {N}명의 연결, 보낸 초대가 삭제되며 되돌릴 수 없습니다."와 "가구 삭제", "취소" 버튼을 보인다.
+ *    "가구 삭제"는 본문 없는 DELETE /api/v1/household 하나를 보내고, 401 REAUTH_REQUIRED면 확인 화면에 머물며 안내
+ *    "가구를 삭제하려면 구글 계정을 한 번 더 확인해야 합니다."와 href가 정확히
+ *    /oauth2/authorization/google?purpose=reauth&returnTo=/household/delete 인 "구글 계정 확인" 링크가 보인다.
+ *    재인증에서 돌아오면(문서를 새로 열어 /household/delete) 확인 화면이 다시 보이고 삭제를 자동으로 보내지 않는다.
+ *    하려던 동작은 localStorage, sessionStorage, 주소(경로, 쿼리, #), returnTo 외의 값, history.state의 usr, 쿠키 어디에도 없다.
  * 게이트 반영으로 더한 테스트는 이름이 "게이트"로 시작한다(같은 문서에서 다시 연 링크, 끝 슬래시, 로그인 끊김, 그 밖의 오류 뒤 삭제).
  * 재리뷰 반영 테스트는 이름이 "재리뷰"로 시작한다(이전 링크의 늦은 들어가기 응답이 새 링크를 건드리지 않음).
  * expectNoTokenLeak()은 콘솔(log, info, warn, error, debug)로 나간 인자와 history.state에도 토큰이 없는지 본다.
@@ -747,5 +757,118 @@ describe('구성원 제거 재인증 뒤 (FR-022, 결정 기록 0013, R14)', () 
     // 사용자가 같은 버튼을 다시 누를 수 있게 버튼은 그대로 있다.
     within(again).getByRole('button', { name: REMOVE })
     expectNoRemoveTrace(stored)
+  })
+})
+
+describe('가구 삭제 재인증 뒤 (US4-3, FR-022, 결정 기록 0013, R14)', () => {
+  const DELETE_HOUSEHOLD = '가구 삭제'
+  const CONFIRM_NOTICE = '가구를 삭제하면 가구, 구성원 2명의 연결, 보낸 초대가 삭제되며 되돌릴 수 없습니다.'
+  const DELETE_REAUTH_NOTICE = '가구를 삭제하려면 구글 계정을 한 번 더 확인해야 합니다.'
+  const REAUTH_HREF = '/oauth2/authorization/google?purpose=reauth&returnTo=/household/delete'
+  /** 밀린 동작의 이름이나 표시. 저장소, 쿠키, history.state의 usr, 링크(재인증 링크 밖), 콘솔에서 찾는다. */
+  const PENDING = /delete|household/i
+
+  /** contracts/openapi.yaml Members 스키마 모양. 나는 owner이고 구성원은 두 명이다. */
+  const twoMembers: Reply = {
+    status: 200,
+    body: {
+      members: [
+        { userId: 1, displayName: '엄마', role: 'owner', loginEmail: 'user1@example.com', emailVerified: true, me: true },
+        { userId: 2, displayName: '민지', role: 'member', loginEmail: 'user2@example.com', emailVerified: true, me: false },
+      ],
+    },
+  }
+
+  /** 재인증 전에는 가구 삭제가 401 REAUTH_REQUIRED, 재인증 뒤에는 204다(자동으로 다시 보내면 기록에 남는다). */
+  function deleteServer() {
+    const state = { reauthed: false }
+    const handler = (call: ApiCall): Reply | undefined => {
+      const is = (method: string, path: string) => call.method === method && call.path === path
+      if (is('GET', '/api/v1/me')) return me
+      if (is('GET', '/api/v1/household')) return twoMembers
+      if (is('GET', '/api/v1/household/invitations')) return { status: 200, body: { invitations: [] } }
+      if (is('DELETE', '/api/v1/household')) return state.reauthed ? noContent : reauthRequired
+      return undefined
+    }
+    return { state, handler }
+  }
+
+  const deleteCalls = () => api.calls.filter((c) => c.method === 'DELETE')
+  const usr = () => (window.history.state as { usr?: unknown } | null)?.usr ?? null
+
+  /**
+   * 삭제 흐름이 브라우저에 아무것도 남기지 않았는지 본다. 저장소, 쿠키, history.state의 usr는 삭제를 누르기 전 모습 그대로여야
+   * 하고(밀린 동작 없음), 저장소, 쿠키, usr, 재인증 링크 밖의 링크, 콘솔에 밀린 동작의 이름이 없어야 한다.
+   */
+  function expectNoDeleteTrace(before: {
+    local: (readonly [string, string])[]
+    session: (readonly [string, string])[]
+    cookie: string
+    usr: unknown
+  }) {
+    expect(entries(localStorage)).toEqual(before.local)
+    expect(entries(sessionStorage)).toEqual(before.session)
+    for (const storage of [localStorage, sessionStorage]) {
+      for (const [key, value] of entries(storage)) {
+        expect(key).not.toMatch(PENDING)
+        expect(value).not.toMatch(PENDING)
+      }
+    }
+    expectAddressClean('/household/delete')
+    expect(document.cookie).toBe(before.cookie)
+    expect(document.cookie).not.toMatch(PENDING)
+    expect(usr()).toEqual(before.usr)
+    expect(JSON.stringify(usr())).not.toMatch(PENDING)
+    for (const link of document.querySelectorAll('a')) {
+      const href = link.getAttribute('href') ?? ''
+      if (href !== REAUTH_HREF) expect(href).not.toMatch(PENDING)
+    }
+    for (const spy of consoleSpies) for (const args of spy.mock.calls) expect(args.map(printed).join(' ')).not.toMatch(PENDING)
+  }
+
+  it('US4-3, FR-022, 결정 기록 0013: 가구 삭제 재인증에서 /household/delete로 돌아와도 삭제를 다시 보내지 않고 확인 화면이 다시 보이며, 밀린 동작은 저장소, 주소, 쿠키, history.state, 링크, 콘솔 어디에도 없다', async () => {
+    const { state, handler } = deleteServer()
+    api = mockApi(handler)
+    openAt('/')
+    fireEvent.click(await screen.findByRole('button', { name: DELETE_HOUSEHOLD }))
+    await screen.findByText(CONFIRM_NOTICE)
+    await settle()
+    expectAddressClean('/household/delete')
+    const before = { local: entries(localStorage), session: entries(sessionStorage), cookie: document.cookie, usr: usr() }
+    expect(deleteCalls()).toEqual([])
+
+    fireEvent.click(screen.getByRole('button', { name: DELETE_HOUSEHOLD }))
+    await screen.findByText(DELETE_REAUTH_NOTICE)
+    await settle()
+    // 본문 없는 가구 삭제 요청 하나만 보냈다.
+    expect(deleteCalls().map((c) => [c.path, c.search, c.body])).toEqual([['/api/v1/household', '', undefined]])
+    const href = screen.getByRole('link', { name: REAUTH }).getAttribute('href') ?? ''
+    expect(href).toBe(REAUTH_HREF)
+    const url = new URL(href, window.location.origin)
+    expect([...url.searchParams]).toEqual([
+      ['purpose', 'reauth'],
+      ['returnTo', '/household/delete'],
+    ])
+    expect(url.hash).toBe('')
+    // 재인증 링크를 누르기 전: 주소, 저장소, 쿠키, history.state의 usr가 삭제를 누르기 전 그대로다.
+    expectNoDeleteTrace(before)
+
+    // 재인증을 마치고 같은 탭에서 문서를 새로 열어 /household/delete로 돌아온다. 이제 삭제를 보내면 204다.
+    cleanup()
+    state.reauthed = true
+    const callsBefore = api.calls.length
+    openAt('/household/delete')
+    await screen.findByText(CONFIRM_NOTICE)
+    await settle()
+    expect(api.calls.slice(callsBefore).some((c) => c.method === 'GET' && c.path === '/api/v1/me')).toBe(true)
+    expect(api.calls.slice(callsBefore).filter((c) => c.method === 'DELETE')).toEqual([])
+    expect(deleteCalls()).toHaveLength(1)
+    expect(screen.queryByText(DELETE_REAUTH_NOTICE)).toBeNull()
+    expect(screen.queryByRole('link', { name: REAUTH })).toBeNull()
+    // 사용자가 다시 누를 수 있게 확인 화면의 두 버튼이 그대로 있다.
+    screen.getByRole('button', { name: DELETE_HOUSEHOLD })
+    screen.getByRole('button', { name: CANCEL })
+    // 새 문서의 history.state는 비어 있으므로 usr는 null이어야 한다.
+    expectNoDeleteTrace({ ...before, usr: null })
   })
 })

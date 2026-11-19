@@ -91,6 +91,11 @@ export function HomePage({
         ))}
       </ul>
       {isOwner && <InvitationArea members={members} notice={notice} setNotice={setNotice} {...handlers} />}
+      {isOwner && (
+        <button className="button" type="button" onClick={() => navigate('/household/delete')}>
+          가구 삭제
+        </button>
+      )}
       <button className="button" type="button" onClick={onLogout}>
         로그아웃
       </button>
