@@ -8,7 +8,7 @@
  * 토큰이 어디에 남는지와 `#`를 지우는 시점은 이 파일이 아니라 T035 테스트가 본다. 여기서는 화면 동작만 본다.
  * 흉내 응답은 상태를 갖는다(발급 뒤 목록에 방금 만든 초대, 취소 뒤 빈 목록, 수락 뒤 member로 들어온 목록).
  */
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/App'
 import {
@@ -779,9 +779,11 @@ describe('게이트: 늦게 온 첫 목록 응답', () => {
     api = mockApi(homeServer())
     const hold = holdFirstList()
     openAt('/')
-    fireEvent.click(await screen.findByRole('button', { name: MAKE }))
+    const make = await screen.findByRole('button', { name: MAKE })
+    // 첫 목록 요청이 발급보다 먼저 나간 뒤에 누른다. 부하가 크면 버튼이 effect보다 먼저 보여 순서가 뒤집혔다.
+    await waitFor(() => expect(hold.held).toBe(true))
+    fireEvent.click(make)
     await screen.findByText(JUST_MADE)
-    expect(hold.held).toBe(true)
 
     act(() => hold.release())
     await settle()
@@ -799,9 +801,11 @@ describe('게이트: 늦게 온 첫 목록 응답', () => {
     api = mockApi(homeServer())
     const hold = holdFirstList(late)
     openAt('/')
-    fireEvent.click(await screen.findByRole('button', { name: MAKE }))
+    const make = await screen.findByRole('button', { name: MAKE })
+    // 첫 목록 요청이 발급보다 먼저 나간 뒤에 누른다. 부하가 크면 버튼이 effect보다 먼저 보여 순서가 뒤집혔다.
+    await waitFor(() => expect(hold.held).toBe(true))
+    fireEvent.click(make)
     await screen.findByText(JUST_MADE)
-    expect(hold.held).toBe(true)
 
     act(() => hold.release())
     await settle()
