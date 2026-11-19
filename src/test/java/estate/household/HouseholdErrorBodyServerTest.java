@@ -244,6 +244,38 @@ class HouseholdErrorBodyServerTest {
     }
 
     @Test
+    @DisplayName("T033 US3-12 FR-024 R16 실서버: 다른 가구 초대, 없는 번호, abc, long 범위를 넘는 번호의 초대 취소 404가 상태, 미디어 타입, 본문까지 같고 계약 예시, MockMvc 본문과 같다")
+    void revokeNotFoundOnRealServer() throws Exception {
+        String ownerA = server.login();
+        String ownerB = server.login();
+        assertThat(create(ownerA).statusCode()).isEqualTo(201);
+        assertThat(create(ownerB).statusCode()).isEqualTo(201);
+        long invitationB = issue(ownerB).path("id").longValue();
+        // 어느 초대에도 없는 번호: 시퀀스가 지금까지 준 값보다 크다
+        long unused = jdbc.sql("select last_value from invitation_id_seq").query(Long.class).single() + 1000;
+
+        List<String> bodies = new ArrayList<>();
+        List<String> types = new ArrayList<>();
+        for (String id : new String[] {String.valueOf(invitationB), String.valueOf(unused), "abc", "9223372036854775808"}) {
+            String path = "/api/v1/household/invitations/" + id;
+            HttpResponse<String> response = sendJson("DELETE", ownerA, path, null);
+            JsonNode real = expectExactProblem(response, 404, NOT_FOUND);
+            bodies.add(response.body());
+            types.add(response.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElseThrow());
+            MvcResult mock = mvc.perform(https(delete(path)).header(HttpHeaders.ORIGIN, ORIGIN).cookie(cookie(ownerA))).andReturn();
+            assertThat(mock.getResponse().getStatus()).as(path).isEqualTo(404);
+            assertThat(JSON.readTree(mock.getResponse().getContentAsString(StandardCharsets.UTF_8))).as("MockMvc 본문과 같다").isEqualTo(real);
+        }
+        assertThat(bodies).as("다른 가구 초대와 없는 초대의 본문이 글자까지 같다").containsOnly(bodies.getFirst());
+        assertThat(types).as("미디어 타입이 같다").containsOnly(types.getFirst());
+        assertThat(jdbc.sql("select status from invitation where id = :id").param("id", invitationB).query(String.class).single())
+                .as("가구 B의 초대가 대기로 남는다").isEqualTo("대기");
+
+        // 짝: 가구 B의 owner에게는 같은 번호가 취소할 수 있는 초대다
+        assertThat(sendJson("DELETE", ownerB, "/api/v1/household/invitations/" + invitationB, null).statusCode()).isEqualTo(204);
+    }
+
+    @Test
     @DisplayName("T056 US3-3 FR-019 실서버: 제거된 사람이 같은 세션 쿠키로 보낸 다음 GET /api/v1/household는 403 NO_HOUSEHOLD이고 계약 예시, MockMvc 본문과 같다")
     void removedMemberBodyOnRealServer() throws Exception {
         String owner = server.login();

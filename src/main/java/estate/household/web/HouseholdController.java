@@ -49,7 +49,8 @@ class HouseholdController {
     Members list(HouseholdMembership membership) {
         var found = service.members(membership.householdId());
         Map<Long, UserProfiles.Profile> byUser = profiles.find(found.stream().map(m -> m.getUserId()).toList());
-        return new Members(found.stream().map(m -> {
+        // 두 조회 사이에 나가고 탈퇴까지 마친 사람은 프로필이 없다. 이미 가구에 없는 사람이므로 목록에서 뺀다
+        return new Members(found.stream().filter(m -> byUser.containsKey(m.getUserId())).map(m -> {
             UserProfiles.Profile p = byUser.get(m.getUserId());
             return new Member(m.getUserId(), p.displayName(), m.getRole().dbValue(), p.loginEmail(), p.emailVerified(),
                     m.getUserId() == membership.userId());

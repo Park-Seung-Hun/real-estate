@@ -1,6 +1,7 @@
 package estate.household;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -283,6 +284,41 @@ class InvitationAcceptTest {
         assertRejected(second, token, "INVITATION_USED");
 
         assertThat(memberRows()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("T041 R17 data-model: 수락은 초대를 수락으로 바꾼 뒤 멤버십을 넣는다(테스트 동안만 둔 트리거가, 수락 초대가 없는 가구의 member 행 삽입을 실패시킨다)")
+    void acceptMarksInvitationBeforeMembership() throws Exception {
+        Person owner = households.newPerson();
+        long household = households.createHousehold(owner);
+        String token = households.invite(owner, 3);
+        Person joiner = households.newPerson();
+        // 두 테이블 사이에 외래 키가 없어 한 트랜잭션 안의 쓰기 순서는 결과 상태로 보이지 않는다. 트리거로 순서를 결과로 드러낸다(리뷰 기준)
+        jdbc.sql("""
+                create or replace function test_member_insert_guard() returns trigger language plpgsql as $$
+                begin
+                    if new.role = 'member' and not exists
+                            (select 1 from invitation where household_id = new.household_id and status = '수락') then
+                        raise exception 'no accepted invitation for household %', new.household_id;
+                    end if;
+                    return new;
+                end $$""").update();
+        try {
+            jdbc.sql("create trigger test_member_insert_guard before insert on household_member for each row "
+                    + "execute function test_member_insert_guard()").update();
+            // 대조: 초대가 아직 대기인 가구에 member 행을 직접 넣으면 트리거가 실제로 막는다(실패한 문장은 행을 바꾸지 않는다)
+            assertThatThrownBy(() -> jdbc.sql("insert into household_member (household_id, user_id, role, joined_at) "
+                    + "values (:h, :u, 'member', now())").param("h", household).param("u", joiner.userId()).update())
+                    .hasMessageContaining("no accepted invitation");
+
+            accept(joiner, token).andExpect(status().isNoContent());
+        } finally {
+            jdbc.sql("drop trigger if exists test_member_insert_guard on household_member").update();
+            jdbc.sql("drop function if exists test_member_insert_guard()").update();
+        }
+        assertThat(jdbc.sql("select status from invitation").query(String.class).single()).isEqualTo("수락");
+        assertThat(jdbc.sql("select role from household_member where user_id = :u").param("u", joiner.userId()).query(String.class).single())
+                .isEqualTo("member");
     }
 
     /** 확인과 수락이 모두 409와 같은 code이고, 본문 키가 Problem의 다섯 개뿐(그 가구의 구성원 정보가 없음)이며, 초대와 멤버십이 바뀌지 않는다. */
