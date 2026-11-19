@@ -19,7 +19,6 @@ import java.util.UUID;
 import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -149,7 +148,6 @@ class InvitationTokenLeakSecurityTest {
     }
 
     @Test
-    @Disabled("T080에서 켬")
     @DisplayName("T029 B7 FR-028 SC-009: 구성원 제거, 가구 나가기, 가구 삭제, 표시 이름 400 흐름의 로그와 응답에 토큰, 해시, 가짜 이메일, 가짜 표시 이름이 없다")
     void noLeakInMemberExitFlows(CapturedOutput output) throws Exception {
         Account owner = account("owner");

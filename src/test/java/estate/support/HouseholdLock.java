@@ -45,6 +45,23 @@ public final class HouseholdLock implements AutoCloseable {
         }
     }
 
+    /** 이 사용자 행을 {@code for update}로 잡는다(householdId()는 0). 사용자 행이 없으면 예외. */
+    public static HouseholdLock holdingUser(DataSource dataSource, long userId) throws SQLException {
+        Connection c = open(dataSource);
+        try (PreparedStatement ps = c.prepareStatement("select id from \"user\" where id = ? for update")) {
+            ps.setLong(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalStateException("잠글 사용자 행이 없다: " + userId);
+                }
+            }
+            return new HouseholdLock(c, 0);
+        } catch (SQLException | RuntimeException e) {
+            c.close();
+            throw e;
+        }
+    }
+
     /** 새 가구와 이 사용자의 멤버십 행을 커밋하지 않고 넣는다. 다른 연결에는 아직 보이지 않는다. */
     public static HouseholdLock uncommittedMembership(DataSource dataSource, long userId, HouseholdRole role) throws SQLException {
         Connection c = open(dataSource);
@@ -103,6 +120,13 @@ public final class HouseholdLock implements AutoCloseable {
             Thread.sleep(50);
         }
         throw new IllegalStateException("잠금을 기다리는 연결이 " + n + "개가 되지 않았다(마지막 확인 " + waiting + "개)");
+    }
+
+    /** 잠금을 잡은 트랜잭션 안에서 SQL 한 문장을 실행한다(같은 행을 바꾸는 다른 요청처럼). */
+    public void execute(String sql) throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute(sql);
+        }
     }
 
     public void commit() throws SQLException {

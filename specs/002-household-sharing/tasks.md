@@ -213,13 +213,13 @@
 
 ### 동작 테스트
 
-- [ ] T075 [P] [US5] `src/test/java/estate/user/MeUpdateLockTest.java`(research R15): 다른 연결이 세션 사용자의 `"user"` 행을 `FOR UPDATE`로 잠근 동안 `PATCH /api/v1/me`가 그 잠금을 기다리는 것을 `pg_stat_activity`로 확인하고, 잠금을 해제한 뒤 200(표시 이름 수정이 트랜잭션 안에서 행을 잠금)
-- [ ] T076 [P] [US5] `src/test/java/estate/household/DisplayNameInHouseholdTest.java`: member가 `PATCH /api/v1/me`로 이름을 바꾸면 본인과 owner의 함께 보는 사람 목록에 새 이름(US5-2). 빈 이름과 21자 이름은 400 `#/displayName`이고 양쪽 목록의 이름이 이전 그대로(US5-3, FR-027). 본문에 `userId` 같은 다른 키를 넣으면 400이고 다른 구성원의 이름이 바뀌지 않으며, 계약에 다른 사람의 이름을 바꾸는 경로가 없음(US5-4, 이 항목은 구현과 다른 쪽이 spec과 설계 문서에서 작성). 멤버십이 있는 owner와 member, 멤버십 없는 사람 모두 수정할 수 있음(`profile:write`, `OPTIONAL`). owner가 이름을 바꾸면 초대 확인 응답의 `inviterDisplayName`이 새 이름(research R8)
+- [X] T075 [P] [US5] `src/test/java/estate/user/MeUpdateLockTest.java`(research R15): 다른 연결이 세션 사용자의 `"user"` 행을 `FOR UPDATE`로 잠근 동안 `PATCH /api/v1/me`가 그 잠금을 기다리는 것을 `pg_stat_activity`로 확인하고, 잠금을 해제한 뒤 200(표시 이름 수정이 트랜잭션 안에서 행을 잠금)
+- [X] T076 [P] [US5] `src/test/java/estate/household/DisplayNameInHouseholdTest.java`: member가 `PATCH /api/v1/me`로 이름을 바꾸면 본인과 owner의 함께 보는 사람 목록에 새 이름(US5-2). 빈 이름과 21자 이름은 400 `#/displayName`이고 양쪽 목록의 이름이 이전 그대로(US5-3, FR-027). 본문에 `userId` 같은 다른 키를 넣으면 400이고 다른 구성원의 이름이 바뀌지 않으며, 계약에 다른 사람의 이름을 바꾸는 경로가 없음(US5-4, 이 항목은 구현과 다른 쪽이 spec과 설계 문서에서 작성). 멤버십이 있는 owner와 member, 멤버십 없는 사람 모두 수정할 수 있음(`profile:write`, `OPTIONAL`). owner가 이름을 바꾸면 초대 확인 응답의 `inviterDisplayName`이 새 이름(research R8)
 
 ### 웹 화면
 
-- [ ] T077 [US5] 내 표시 이름 영역 `web/src/pages/HomePage.tsx`, `web/src/api/client.ts`(001의 `PATCH /api/v1/me` 호출)(research R14): 제목 "내 표시 이름", 항목 "지금 이름"과 현재 이름(비어 있으면 빈칸), 자리표시 "새 이름"인 빈 입력란, 버튼 "저장". 400이면 "표시 이름은 1자 이상 20자 이하로 입력해 주세요."이고 지금 이름은 그대로, 성공하면 내 정보와 목록을 다시 읽음
-- [ ] T078 [P] [US5] 화면 테스트 `web/tests/unit/display-name.test.tsx`: 지금 이름과 빈 "새 이름" 입력란과 저장 버튼, 이름이 null이면 빈칸(US5-1). 저장 뒤 지금 이름과 목록의 내 이름이 새 이름(US5-2). 공백만과 21자를 저장하면 이유 문구가 보이고 지금 이름이 그대로(US5-3). 다른 구성원의 행에 이름 입력란이 없음(US5-4)
+- [X] T077 [US5] 내 표시 이름 영역 `web/src/pages/HomePage.tsx`, `web/src/api/client.ts`(001의 `PATCH /api/v1/me` 호출)(research R14): 제목 "내 표시 이름", 항목 "지금 이름"과 현재 이름(비어 있으면 빈칸), 자리표시 "새 이름"인 빈 입력란, 버튼 "저장". 400이면 "표시 이름은 1자 이상 20자 이하로 입력해 주세요."이고 지금 이름은 그대로, 성공하면 내 정보와 목록을 다시 읽음. 지금 이름은 목록의 내 행에서 읽으므로 성공 뒤에는 목록만 다시 읽는다(내 정보까지 다시 읽는 앱 재시작 경로는 첫 화면을 다시 그려 방금 만든 초대 링크를 지움)
+- [X] T078 [P] [US5] 화면 테스트 `web/tests/unit/display-name.test.tsx`: 지금 이름과 빈 "새 이름" 입력란과 저장 버튼, 이름이 null이면 빈칸(US5-1). 저장 뒤 지금 이름과 목록의 내 이름이 새 이름(US5-2). 공백만과 21자를 저장하면 이유 문구가 보이고 지금 이름이 그대로(US5-3). 다른 구성원의 행에 이름 입력란이 없음(US5-4)
 
 **Checkpoint**: 다섯 사용자 스토리가 모두 동작합니다. 사용자가 브라우저로 확인할 순서는 quickstart "표시 이름 (사용자 스토리 5)" 1~3번입니다.
 
@@ -227,8 +227,8 @@
 
 ## Phase 8: Polish
 
-- [ ] T079 [P] 비활성으로 둔 항목을 확인한다: `src/test/java/estate/`와 `web/tests/`에서 `@Disabled`와 `it.skip` 중 이 기능의 작업 번호가 적힌 것이 T080의 둘 말고 남지 않았는지
-- [ ] T080 T008의 "계약 경로마다 핸들러가 있음" 항목과 T029의 구성원 제거, 가구 나가기, 가구 삭제, 표시 이름 400 흐름 항목을 켜고 통과시킨다 `src/test/java/estate/household/security/AccessAnnotationSecurityTest.java`, `InvitationTokenLeakSecurityTest.java`(B11, B7, FR-025, FR-028, SC-009)
+- [X] T079 [P] 비활성으로 둔 항목을 확인한다: `src/test/java/estate/`와 `web/tests/`에서 `@Disabled`와 `it.skip` 중 이 기능의 작업 번호가 적힌 것이 T080의 둘 말고 남지 않았는지
+- [X] T080 T008의 "계약 경로마다 핸들러가 있음" 항목과 T029의 구성원 제거, 가구 나가기, 가구 삭제, 표시 이름 400 흐름 항목을 켜고 통과시킨다 `src/test/java/estate/household/security/AccessAnnotationSecurityTest.java`, `InvitationTokenLeakSecurityTest.java`(B11, B7, FR-025, FR-028, SC-009)
 - [ ] T081 Playwright 테스트 `web/tests/e2e/household.spec.ts`(필요하면 `web/scripts/e2e.sh`): 브라우저 컨텍스트 둘에 001 `login.spec.ts`의 가짜 구글 로그인 방식으로 서로 다른 가짜 계정(`example.com` 주소)을 로그인시켜, 가구 만들기, 초대 발급과 링크 복사, 다른 컨텍스트에서 링크 열기와 로그인과 확인 화면과 들어가기, 양쪽 목록, 구성원 제거, 다시 초대와 수락, 가구 나가기, 다시 초대와 수락, 탈퇴 409 안내, 가구 삭제와 양쪽 가구 없음 화면을 차례로 확인(SC-001, SC-002). 너비 360px에서 임시 첫 화면(owner, 방금 만든 초대가 있는 owner, member), 초대 확인 화면, 초대 수락 실패 안내, 가구 삭제 확인 화면, 가구 나가기 확인 화면, 바뀐 가구 없음 화면, 바뀐 로그인 화면, 탈퇴 확인 화면의 409 안내에서 가로 스크롤이 없고 모든 버튼을 누를 수 있음(FR-029, SC-010)
 - [ ] T082 전체 테스트를 통과시킨다: `./gradlew test --rerun`, `cd web && npm test`, `./gradlew bootJar` 뒤 `cd web && npm run e2e`
 - [ ] T083 커밋 전 점검: 저장소 소유자의 비공개 계획 파일에 있는 공통 점검 명령(금지 기호, 공개하지 않을 낱말, 실제 지역 코드), 실제 이메일 주소와 키 값 검색(`git grep`으로 `@gmail.com`, 32바이트 base64 형태, 43자 base64url 토큰 형태), 테스트와 quickstart의 계정이 가짜 값인지, `.env`가 스테이징되지 않았는지(constitution III)

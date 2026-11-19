@@ -147,3 +147,27 @@ export function watchNavigation() {
     },
   }
 }
+
+/**
+ * mockApi 위에 fetch를 한 겹 더 씌워, 이 함수를 부른 뒤 처음 오는 method path 요청의 응답을 붙잡아 두었다가 release()로 푼다.
+ * 요청은 mockApi에 그대로 기록되고, 응답은 요청을 받은 순간의 서버 상태로 정해진다.
+ * 브라우저처럼 그 요청의 signal이 풀기 전에 중단되었으면 AbortError로 거부한다. 반드시 mockApi 뒤에 부른다.
+ */
+export function holdNext(method: string, path: string) {
+  const mocked = globalThis.fetch
+  const hold = { held: false, release: () => {} }
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : undefined
+    const url = new URL(request ? request.url : String(input), window.location.href)
+    const requestMethod = (init?.method ?? request?.method ?? 'GET').toUpperCase()
+    if (hold.held || requestMethod !== method || url.pathname !== path) return mocked(input, init)
+    hold.held = true
+    const answer = await mocked(input, init)
+    await new Promise<void>((resolve) => {
+      hold.release = resolve
+    })
+    if ((init?.signal ?? request?.signal)?.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
+    return answer
+  })
+  return hold
+}

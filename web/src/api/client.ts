@@ -36,6 +36,11 @@ export const isUnauthenticated = (error: unknown) => error instanceof ApiError &
 
 export const getMe = async (): Promise<Me> => (await request('GET', '/api/v1/me')).json()
 
+// 001의 표시 이름 수정. 입력값을 그대로 보내고 규칙 검사는 서버가 한다.
+export const updateDisplayName = async (displayName: string): Promise<void> => {
+  await request('PATCH', '/api/v1/me', { displayName })
+}
+
 export const logout = async (): Promise<void> => {
   await request('POST', '/api/v1/logout')
 }

@@ -16,7 +16,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,7 +61,6 @@ class AccessAnnotationSecurityTest {
     }
 
     @Test
-    @Disabled("T080에서 켬")
     @DisplayName("T008 B11 research R2 FR-025 FR-026: 계약의 /api/ 경로와 메서드마다 핸들러가 있다")
     void everyContractOperationHasHandler() throws IOException {
         List<String> missing = contractOperations().stream().filter(op -> handlerFor(op).isEmpty()).map(Operation::key).toList();

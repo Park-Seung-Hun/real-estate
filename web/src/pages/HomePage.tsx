@@ -10,13 +10,13 @@ import {
   isUnauthenticated,
   listInvitations,
   removeMember,
+  updateDisplayName,
 } from '../api/client'
 import type { Invitation, Member } from '../api/client'
 
 type Handlers = { onReload: () => void; onNoHousehold: () => void; onUnauthenticated: () => void }
 // 첫 화면의 안내는 하나만 보인다. 마지막 응답의 안내만 남는다(research R13)
-type Notice = 'inviteReauth' | 'removeReauth' | 'retry' | null
-type NoticeState = { notice: Notice; setNotice: (n: Notice) => void }
+type Notice = 'inviteReauth' | 'removeReauth' | 'retry' | 'nameInvalid' | null
 
 export function HomePage({
   members,
@@ -36,6 +36,29 @@ export function HomePage({
     }
   }, [])
   const isOwner = members.some((m) => m.me && m.role === 'owner')
+  const myName = members.find((m) => m.me)?.displayName ?? ''
+  const [newName, setNewName] = useState('')
+  const saving = useRef(false)
+
+  // 성공하면 목록만 다시 읽는다. 지금 이름은 목록의 내 행에서 읽고, 화면을 다시 그리지 않아 방금 만든 초대 링크가 남는다.
+  const onSaveName = () => {
+    if (saving.current) return
+    saving.current = true
+    setNotice(null)
+    const same = snapshot()
+    updateDisplayName(newName).then(
+      () => {
+        saving.current = false
+        if (mounted.current) setNewName('')
+        if (same()) handlers.onReload()
+      },
+      (error) => {
+        saving.current = false
+        if (isUnauthenticated(error)) same() && handlers.onUnauthenticated()
+        else if (mounted.current) setNotice(errorStatus(error) === 400 ? 'nameInvalid' : 'retry')
+      },
+    )
+  }
 
   const onRemove = (userId: number) => {
     if (sending.current) return
@@ -59,6 +82,22 @@ export function HomePage({
 
   return (
     <>
+      <h2>내 표시 이름</h2>
+      <dl>
+        <dt>지금 이름</dt>
+        <dd>{myName}</dd>
+      </dl>
+      <input
+        type="text"
+        aria-label="새 이름"
+        placeholder="새 이름"
+        value={newName}
+        onChange={(e) => setNewName(e.target.value)}
+      />
+      <button className="button" type="button" onClick={onSaveName}>
+        저장
+      </button>
+      {notice === 'nameInvalid' && <p>표시 이름은 1자 이상 20자 이하로 입력해 주세요.</p>}
       <h2>함께 보는 사람</h2>
       <ul>
         {members.map((m) => (
@@ -90,7 +129,20 @@ export function HomePage({
           </li>
         ))}
       </ul>
-      {isOwner && <InvitationArea members={members} notice={notice} setNotice={setNotice} {...handlers} />}
+      {isOwner && <InvitationArea members={members} setNotice={setNotice} {...handlers} />}
+      {notice === 'retry' && <p>잠시 후 다시 시도해 주세요.</p>}
+      {(notice === 'inviteReauth' || notice === 'removeReauth') && (
+        <>
+          <p>
+            {notice === 'inviteReauth'
+              ? '초대 링크를 만들려면 구글 계정을 한 번 더 확인해야 합니다.'
+              : '구성원을 제거하려면 구글 계정을 한 번 더 확인해야 합니다.'}
+          </p>
+          <a className="button" href="/oauth2/authorization/google?purpose=reauth&returnTo=/">
+            구글 계정 확인
+          </a>
+        </>
+      )}
       {isOwner && (
         <button className="button" type="button" onClick={() => navigate('/household/delete')}>
           가구 삭제
@@ -112,12 +164,11 @@ const monthDay = (iso: string) => {
 
 function InvitationArea({
   members,
-  notice,
   setNotice,
   onReload,
   onNoHousehold,
   onUnauthenticated,
-}: { members: Member[] } & NoticeState & Handlers) {
+}: { members: Member[]; setNotice: (n: Notice) => void } & Handlers) {
   const [invitations, setInvitations] = useState<Invitation[]>([])
   // 만든 직후의 링크. 이 컴포넌트의 상태에만 두고 어디에도 저장하지 않는다.
   const [link, setLink] = useState<{ id: number; url: string } | null>(null)
@@ -232,19 +283,6 @@ function InvitationArea({
             초대 링크 만들기
           </button>
           <p>만든 링크를 복사해 메신저나 메일로 보냅니다.</p>
-        </>
-      )}
-      {notice === 'retry' && <p>잠시 후 다시 시도해 주세요.</p>}
-      {(notice === 'inviteReauth' || notice === 'removeReauth') && (
-        <>
-          <p>
-            {notice === 'inviteReauth'
-              ? '초대 링크를 만들려면 구글 계정을 한 번 더 확인해야 합니다.'
-              : '구성원을 제거하려면 구글 계정을 한 번 더 확인해야 합니다.'}
-          </p>
-          <a className="button" href="/oauth2/authorization/google?purpose=reauth&returnTo=/">
-            구글 계정 확인
-          </a>
         </>
       )}
     </>
