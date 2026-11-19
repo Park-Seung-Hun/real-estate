@@ -17,7 +17,18 @@ const RETRY = '잠시 후 다시 시도해 주세요.'
 
 type View = { kind: 'checking' } | { kind: 'confirm'; inviter: string | null } | { kind: 'failure'; message: string }
 
-export function InvitePage({ onJoined, onUnauthenticated }: { onJoined: () => void; onUnauthenticated: () => void }) {
+// onJoinedAway: 확인 화면이 내려간 뒤에 들어가기가 성공하면 첫 화면에서 목록을 다시 읽는다(research R14 흐름도 아래 문단).
+export function InvitePage({
+  snapshot,
+  onJoined,
+  onJoinedAway,
+  onUnauthenticated,
+}: {
+  snapshot: () => () => boolean
+  onJoined: () => void
+  onJoinedAway: () => void
+  onUnauthenticated: () => void
+}) {
   const navigate = useNavigate()
   const [view, setView] = useState<View>({ kind: 'checking' })
   const sending = useRef(false)
@@ -40,11 +51,14 @@ export function InvitePage({ onJoined, onUnauthenticated }: { onJoined: () => vo
     let active = true
     const token = sessionStorage.getItem(INVITE_TOKEN_KEY)
     if (token === null) setView({ kind: 'failure', message: FAILURE.NOT_FOUND })
-    else
+    else {
+      const same = snapshot()
       previewInvitation(token).then(
         (preview) => active && setView({ kind: 'confirm', inviter: preview.inviterDisplayName }),
-        (error) => active && (isUnauthenticated(error) ? onUnauthenticated() : fail(error)),
+        // 401은 화면이 내려간 뒤에 와도 같은 로그인 세션이면 로그인 화면으로 보낸다(토큰은 남긴다, research R7).
+        (error) => (isUnauthenticated(error) ? same() && onUnauthenticated() : active && fail(error)),
       )
+    }
     return () => {
       active = false
     }
@@ -54,17 +68,26 @@ export function InvitePage({ onJoined, onUnauthenticated }: { onJoined: () => vo
     const token = sessionStorage.getItem(INVITE_TOKEN_KEY)
     if (sending.current || token === null) return
     sending.current = true
+    // 결과가 오면 화면이 내려간 뒤라도 보낸 토큰을 지운다. 새 토큰으로 다시 열린 경우를 지키려고 저장된 값이 같을 때만(research R7).
+    const forget = () => sessionStorage.getItem(INVITE_TOKEN_KEY) === token && sessionStorage.removeItem(INVITE_TOKEN_KEY)
+    const same = snapshot()
     acceptInvitation(token).then(
       () => {
-        if (!mounted.current) return
-        sessionStorage.removeItem(INVITE_TOKEN_KEY)
-        onJoined()
+        forget()
+        if (mounted.current) onJoined()
+        else if (same()) onJoinedAway()
       },
       (error) => {
+        // 401은 토큰을 남기고(research R7), 확인 화면이 내려간 뒤에 와도 같은 로그인 세션이면 로그인 화면으로 보낸다
+        if (isUnauthenticated(error)) {
+          if (mounted.current) sending.current = false
+          if (same()) onUnauthenticated()
+          return
+        }
+        forget()
         if (!mounted.current) return
         sending.current = false
-        if (isUnauthenticated(error)) onUnauthenticated()
-        else fail(error)
+        fail(error)
       },
     )
   }

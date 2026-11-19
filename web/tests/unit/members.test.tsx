@@ -499,10 +499,10 @@ describe('늦게 온 응답과 로그인 만료', () => {
   /**
    * 로그인 상태를 갖는 서버 흉내. 로그아웃 204나 401 UNAUTHENTICATED 응답 뒤에는 /me를 포함한 모든 요청이 401이다.
    * 제거 요청 뒤 목록 다시 읽기는 reread(없으면 household)를 돌려준다.
-   * 나가기는 leave(없으면 204)를 돌려주고 목록은 바꾸지 않는다(취소 뒤 첫 화면이 목록이어야 늦게 온 응답의 효과를 볼 수 있다).
+   * 나가기는 leave(없으면 204)를 돌려주고, 204나 403이면 그 뒤 목록은 403이다(취소 뒤 첫 화면은 요청 전에 읽은 목록 그대로다).
    */
   function sessionServer(o: { household: Reply; remove?: Reply; reread?: Reply; leave?: Reply }) {
-    const state = { session: true, removed: false }
+    const state = { session: true, removed: false, left: false }
     const answer = (reply: Reply) => {
       if (reply === unauthenticated) state.session = false
       return reply
@@ -514,13 +514,19 @@ describe('늦게 온 응답과 로그인 만료', () => {
       }
       if (!state.session) return unauthenticated
       if (is(call, 'GET', '/api/v1/me')) return me
-      if (is(call, 'GET', '/api/v1/household')) return answer(state.removed ? (o.reread ?? o.household) : o.household)
+      if (is(call, 'GET', '/api/v1/household'))
+        return answer(state.left ? noHousehold : state.removed ? (o.reread ?? o.household) : o.household)
       if (is(call, 'GET', '/api/v1/household/invitations')) return { status: 200, body: { invitations: [] } }
       if (is(call, 'DELETE', MEMBER_PATH)) {
         state.removed = true
         return answer(o.remove ?? noContent)
       }
-      if (is(call, 'DELETE', MEMBERSHIP_PATH)) return answer(o.leave ?? noContent)
+      if (is(call, 'DELETE', MEMBERSHIP_PATH)) {
+        const reply = o.leave ?? noContent
+        // 나가기가 204나 403이면 서버에는 내 멤버십이 없으므로 그 뒤 목록도 403이다
+        if (reply === noContent || reply === noHousehold) state.left = true
+        return answer(reply)
+      }
       return undefined
     }
   }

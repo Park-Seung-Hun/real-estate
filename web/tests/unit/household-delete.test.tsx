@@ -137,10 +137,10 @@ const bodyText = () => document.body.textContent ?? ''
 
 /**
  * 가구 상태를 갖는 서버 흉내. 삭제 응답은 차례로 쓰고 마지막 것을 되풀이한다.
- * 삭제가 204나 403 NO_HOUSEHOLD면 이후 가구 없음이 된다(keep이면 목록을 그대로 둔다. 늦은 응답 테스트용).
+ * 삭제가 204나 403 NO_HOUSEHOLD면 이후 가구 없음이 된다(서버처럼 요청을 받은 순간 바뀐다).
  * 로그아웃 204나 401 UNAUTHENTICATED 응답 뒤에는 모든 요청이 401이다.
  */
-function server(o: { household: Reply; del?: Outcome[]; remove?: Reply; keep?: boolean }) {
+function server(o: { household: Reply; del?: Outcome[]; remove?: Reply }) {
   const state = { household: o.household, session: true, deletes: 0 }
   const answer = (reply: Reply) => {
     if (reply === unauthenticated) state.session = false
@@ -160,7 +160,7 @@ function server(o: { household: Reply; del?: Outcome[]; remove?: Reply; keep?: b
       const replies = o.del ?? [noContent]
       const reply = replies[Math.min(state.deletes++, replies.length - 1)]
       if (reply === networkError || !reply) return reply
-      if (!o.keep && (reply.status === 204 || reply === noHousehold)) state.household = noHousehold
+      if (reply.status === 204 || reply === noHousehold) state.household = noHousehold
       return answer(reply)
     }
     return undefined
@@ -419,10 +419,15 @@ describe('안내는 한 번에 하나만 보인다', () => {
 describe('다른 구성원과 member', () => {
   it('US4-4: 다른 구성원은 삭제 뒤 다음 가구 요청의 403 NO_HOUSEHOLD로 가구 없음 화면이 된다', async () => {
     // owner가 가구를 지운 뒤라 member의 나가기 요청이 403 NO_HOUSEHOLD를 받는다
+    const state = { left: false }
     api = mockApi((call) => {
       if (is(call, 'GET', '/api/v1/me')) return me
-      if (is(call, 'GET', DELETE_PATH)) return asMember
-      if (is(call, 'DELETE', MEMBERSHIP_PATH)) return noHousehold
+      // 가구가 지워진 뒤라 나가기 뒤 다시 읽는 목록도 403이다
+      if (is(call, 'GET', DELETE_PATH)) return state.left ? noHousehold : asMember
+      if (is(call, 'DELETE', MEMBERSHIP_PATH)) {
+        state.left = true
+        return noHousehold
+      }
       return undefined
     })
     openAt('/')
@@ -518,7 +523,8 @@ describe('늦게 온 응답', () => {
 
   /** owner가 가구 삭제를 누르고 응답을 기다리는 동안 같은 세션에서 취소로 첫 화면(목록)에 돌아온다. 목록은 그대로다. */
   async function deleteThenCancel(del: Reply, remove?: Reply) {
-    api = mockApi(server({ household: owner2, del: [del], remove, keep: true }))
+    // 삭제가 204나 403이면 서버에는 가구가 없으므로 그 뒤 목록도 403이다(앱은 늦은 204, 403 뒤 목록을 다시 읽어 상태를 정한다)
+    api = mockApi(server({ household: owner2, del: [del], remove }))
     openAt('/household/delete')
     await expectConfirm(2)
     await settle()

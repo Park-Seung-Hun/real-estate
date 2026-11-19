@@ -60,18 +60,12 @@ function Shell() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  // 로그인 없음이나 가구 없음으로 바꾸는 자리는 모두 세대를 올린다. 그 전에 보낸 요청의 늦은 응답은 앱 상태를 바꾸지 못한다.
+  // 로그인 세대. 로그인 화면으로 바꾸는 자리만 올린다. 그 전에 보낸 요청의 응답은 앱 상태를 바꾸지 못하고,
+  // 가구 상태가 바뀌어도 그대로라 같은 로그인 세션의 늦은 401은 언제 와도 로그인 화면으로 보낸다.
   const generation = useRef(0)
   const snapshot = () => {
     const started = generation.current
     return () => started === generation.current
-  }
-
-  // 가구 요청이 403 NO_HOUSEHOLD를 받으면 가구 없음 화면으로 간다(FR-019). 이후 가구 화면이 같은 함수를 쓴다.
-  const onNoHousehold = () => {
-    generation.current++
-    setSession('noHousehold')
-    navigate('/')
   }
 
   const goAnonymous = () => {
@@ -79,17 +73,14 @@ function Shell() {
     setSession('anonymous')
   }
 
-  // 목록을 읽어 가구 있음이나 가구 없음으로 정한다. 호출한 쪽이 이미 사라졌으면 active로 건너뛴다.
-  // 첫 조회의 403은 경로를 그대로 둔다(가구 없는 사람이 /withdraw를 새로 열 수 있게). 화면을 그린 뒤의 403만 /로 보낸다(FR-019).
-  const loadHousehold = (
-    active: () => boolean = () => true,
-    onMissing = () => {
-      generation.current++
-      setSession('noHousehold')
-    },
-  ) => {
+  // 가구 상태는 목록 조회의 응답으로만 정하고, 가장 나중에 보낸 목록 요청의 응답만 반영한다. 다른 요청의 204, 403, 404는
+  // 목록을 다시 읽으라는 신호일 뿐이라, 늦게 온 옛 응답이 새 가구 화면이나 로그인 화면을 덮지 못한다.
+  // 첫 조회의 403은 경로를 그대로 둔다(가구 없는 사람이 /withdraw를 새로 열 수 있게). 그 뒤의 403만 /로 보낸다(FR-019).
+  const listSeq = useRef(0)
+  const loadHousehold = (first = false) => {
+    const mine = ++listSeq.current
     const same = snapshot()
-    const current = () => active() && same()
+    const current = () => mine === listSeq.current && same()
     return getHousehold().then(
       (list) => {
         if (!current()) return
@@ -97,18 +88,34 @@ function Shell() {
         setSession('household')
       },
       (error) => {
-        if (!current()) return
-        if (isUnauthenticated(error)) goAnonymous()
-        else if (isNoHousehold(error)) onMissing()
-        else setSession('error')
+        // 401은 순번과 관계없이 같은 로그인 세션이면 로그인 화면으로 보낸다. 순번은 가구 상태를 정하는 응답에만 쓴다.
+        if (isUnauthenticated(error)) same() && goAnonymous()
+        else if (!current()) return
+        else if (isNoHousehold(error)) {
+          setSession('noHousehold')
+          if (!first) navigate('/')
+        } else setSession('error')
       },
     )
+  }
+  const reload = () => loadHousehold()
+
+  // 가구 삭제, 나가기, 만들기, 화면을 떠난 뒤 온 들어가기 성공 뒤에는 어느 경로에 있었든 첫 화면에서 목록을 다시 읽는다(US1-2).
+  // 다시 읽는 동안은 확인 중으로 두어, 지운 가구의 옛 목록과 버튼이 잠깐 다시 그려지지 않게 한다.
+  const goHome = () => {
+    // 이미 첫 화면이면 확인 중으로 두지 않는다. 첫 화면에서 받은 늦은 신호가 방금 만든 링크와 입력값을 지우지 않게.
+    // 늦은 콜백에서도 불리므로 렌더 때 값이 아니라 부르는 순간의 주소를 읽는다.
+    if (window.location.pathname !== '/') setSession('loading')
+    navigate('/')
+    loadHousehold()
   }
 
   useEffect(() => {
     let active = true
     getMe().then(
-      () => loadHousehold(() => active),
+      () => {
+        if (active) loadHousehold(true)
+      },
       (error) => active && (isUnauthenticated(error) ? goAnonymous() : setSession('error')),
     )
     return () => {
@@ -130,17 +137,19 @@ function Shell() {
       (error) => isUnauthenticated(error) && goAnonymous(),
     )
 
-  // 409 HAS_HOUSEHOLD는 다른 탭에서 이미 만든 것이므로 목록을 다시 읽는다.
-  const onCreate = () =>
+  // 409 HAS_HOUSEHOLD는 다른 탭에서 이미 만든 것이므로 만든 것과 같이 첫 화면에서 목록을 다시 읽는다.
+  const onCreate = () => {
+    const same = snapshot()
     createHousehold().then(
-      () => loadHousehold(undefined, onNoHousehold),
-      (error) =>
-        isHasHousehold(error)
-          ? loadHousehold(undefined, onNoHousehold)
-          : isUnauthenticated(error)
-            ? goAnonymous()
-            : setSession('error'),
+      () => same() && goHome(),
+      (error) => {
+        if (!same()) return
+        if (isHasHousehold(error)) goHome()
+        else if (isUnauthenticated(error)) goAnonymous()
+        else setSession('error')
+      },
     )
+  }
 
   const home =
     session === 'household' ? (
@@ -148,8 +157,7 @@ function Shell() {
         members={members}
         snapshot={snapshot}
         onLogout={onLogout}
-        onReload={() => loadHousehold(undefined, onNoHousehold)}
-        onNoHousehold={onNoHousehold}
+        onReload={reload}
         onUnauthenticated={onUnauthenticated}
       />
     ) : session === 'noHousehold' ? (
@@ -176,13 +184,25 @@ function Shell() {
         <Route path="/withdraw" element={loggedIn ? <WithdrawPage onGone={goAnonymous} /> : home} />
         <Route
           path="/invite"
-          element={loggedIn ? <InvitePage key={inviteKey} onJoined={onJoined} onUnauthenticated={onUnauthenticated} /> : home}
+          element={
+            loggedIn ? (
+              <InvitePage
+                key={inviteKey}
+                snapshot={snapshot}
+                onJoined={onJoined}
+                onJoinedAway={goHome}
+                onUnauthenticated={onUnauthenticated}
+              />
+            ) : (
+              home
+            )
+          }
         />
         <Route
           path="/household/leave"
           element={
             session === 'household' && members.some((m) => m.me && m.role === 'member') ? (
-              <LeaveHouseholdPage snapshot={snapshot} onLeft={onNoHousehold} onUnauthenticated={onUnauthenticated} />
+              <LeaveHouseholdPage snapshot={snapshot} onLeft={goHome} onUnauthenticated={onUnauthenticated} />
             ) : (
               home
             )
@@ -195,7 +215,7 @@ function Shell() {
               <DeleteHouseholdPage
                 memberCount={members.length}
                 snapshot={snapshot}
-                onDeleted={onNoHousehold}
+                onDeleted={goHome}
                 onUnauthenticated={onUnauthenticated}
               />
             ) : (

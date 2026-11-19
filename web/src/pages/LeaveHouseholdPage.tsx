@@ -14,7 +14,7 @@ export function LeaveHouseholdPage({
   const navigate = useNavigate()
   const [retry, setRetry] = useState(false)
   const sending = useRef(false)
-  // 화면 안 안내는 화면이 남아 있을 때만 띄운다. 앱 상태 전환은 snapshot의 세대로 거른다.
+  // 화면 안 안내는 화면이 남아 있을 때만 띄운다. 앱 상태 전환은 snapshot의 로그인 세대로 거른다.
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true

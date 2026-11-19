@@ -796,7 +796,6 @@ describe('게이트: 늦게 온 첫 목록 응답', () => {
 
   it.each([
     { name: '500', late: serverError },
-    { name: '401 UNAUTHENTICATED', late: unauthenticated },
   ])('재리뷰, R14: 늦게 온 첫 목록 응답이 $name 이어도 발급 결과를 덮지 않는다', async ({ late }) => {
     api = mockApi(homeServer())
     const hold = holdFirstList(late)
@@ -815,6 +814,25 @@ describe('게이트: 늦게 온 첫 목록 응답', () => {
     screen.getByText(TITLE)
     expect(screen.queryByText(RETRY_GUIDE)).toBeNull()
     expect(screen.queryByRole('link', { name: LOGIN })).toBeNull()
+  })
+
+  // 2026-11-19 사용자 결정: 링크가 보이는 상태라도 세션이 끝났으므로 늦게 온 앞선 목록 요청의 401은 로그인 화면으로 보낸다(뒤집음).
+  it('재리뷰, R14(2026-11-19 사용자 결정): 늦게 온 첫 목록 응답이 401 UNAUTHENTICATED면 발급 뒤에도 로그인 화면으로 간다', async () => {
+    api = mockApi(homeServer())
+    const hold = holdFirstList(unauthenticated)
+    openAt('/')
+    const make = await screen.findByRole('button', { name: MAKE })
+    await waitFor(() => expect(hold.held).toBe(true))
+    fireEvent.click(make)
+    await screen.findByText(JUST_MADE)
+
+    act(() => hold.release())
+    await screen.findByRole('link', { name: LOGIN })
+    await settle()
+    expect(screen.queryByText(`${window.location.origin}/invite#${TOKEN}`)).toBeNull()
+    expect(screen.queryByRole('button', { name: COPY })).toBeNull()
+    expect(screen.queryByText(TITLE)).toBeNull()
+    expect(bodyText()).not.toContain('user1@example.com')
   })
 })
 

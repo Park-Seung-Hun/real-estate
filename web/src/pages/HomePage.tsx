@@ -14,8 +14,10 @@ import {
 } from '../api/client'
 import type { Invitation, Member } from '../api/client'
 
-type Handlers = { onReload: () => void; onNoHousehold: () => void; onUnauthenticated: () => void }
-// 첫 화면의 안내는 하나만 보인다. 마지막 응답의 안내만 남는다(research R13)
+// onReload는 목록을 다시 읽는다. 가구 없음으로 바꿀지는 그 목록 응답이 정한다(403 NO_HOUSEHOLD도 다시 읽기 신호).
+type Handlers = { onReload: () => void; onUnauthenticated: () => void }
+type Snapshot = () => () => boolean
+// 첫 화면의 안내는 하나만 보인다. 마지막 응답의 안내만 남는다(001 research R13)
 type Notice = 'inviteReauth' | 'removeReauth' | 'retry' | 'nameInvalid' | null
 
 export function HomePage({
@@ -23,11 +25,11 @@ export function HomePage({
   snapshot,
   onLogout,
   ...handlers
-}: { members: Member[]; snapshot: () => () => boolean; onLogout: () => void } & Handlers) {
+}: { members: Member[]; snapshot: Snapshot; onLogout: () => void } & Handlers) {
   const navigate = useNavigate()
   const [notice, setNotice] = useState<Notice>(null)
   const sending = useRef(false)
-  // 화면 안 안내는 화면이 남아 있을 때만 띄운다. 앱 상태 전환은 snapshot의 세대로 거른다.
+  // 화면 안 안내는 화면이 남아 있을 때만 띄운다. 앱 상태 전환은 snapshot의 로그인 세대로 거른다.
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -73,8 +75,7 @@ export function HomePage({
       (error) => {
         sending.current = false
         if (isUnauthenticated(error)) same() && handlers.onUnauthenticated()
-        else if (isNoHousehold(error)) same() && handlers.onNoHousehold()
-        else if (errorStatus(error) === 404) same() && handlers.onReload()
+        else if (isNoHousehold(error) || errorStatus(error) === 404) same() && handlers.onReload()
         else if (mounted.current) setNotice(isReauthRequired(error) ? 'removeReauth' : 'retry')
       },
     )
@@ -129,7 +130,7 @@ export function HomePage({
           </li>
         ))}
       </ul>
-      {isOwner && <InvitationArea members={members} setNotice={setNotice} {...handlers} />}
+      {isOwner && <InvitationArea members={members} snapshot={snapshot} setNotice={setNotice} {...handlers} />}
       {notice === 'retry' && <p>잠시 후 다시 시도해 주세요.</p>}
       {(notice === 'inviteReauth' || notice === 'removeReauth') && (
         <>
@@ -164,30 +165,36 @@ const monthDay = (iso: string) => {
 
 function InvitationArea({
   members,
+  snapshot,
   setNotice,
   onReload,
-  onNoHousehold,
   onUnauthenticated,
-}: { members: Member[]; setNotice: (n: Notice) => void } & Handlers) {
+}: { members: Member[]; snapshot: Snapshot; setNotice: (n: Notice) => void } & Handlers) {
   const [invitations, setInvitations] = useState<Invitation[]>([])
   // 만든 직후의 링크. 이 컴포넌트의 상태에만 두고 어디에도 저장하지 않는다.
   const [link, setLink] = useState<{ id: number; url: string } | null>(null)
   const [days, setDays] = useState('3')
   const sending = useRef(false)
+  // 응답을 기다리는 취소. 같은 초대의 취소를 응답 전에 다시 보내지 않는다.
+  const cancelling = useRef(new Set<number>())
   // 늦게 온 앞선 목록 응답이 발급이나 취소 결과, 더 나중 요청의 결과를 덮지 않게 요청마다 순번을 둔다.
   const latest = useRef(0)
 
-  const fail = (error: unknown) => {
+  // same은 요청을 보낼 때 잡은 로그인 세대. 그사이 로그인 화면으로 갔으면 아무것도 하지 않는다.
+  const fail = (error: unknown, same: () => boolean) => {
+    if (!same()) return
     if (isUnauthenticated(error)) onUnauthenticated()
-    else if (isNoHousehold(error)) onNoHousehold()
+    else if (isNoHousehold(error)) onReload()
     else setNotice('retry')
   }
 
   const reloadInvitations = () => {
     const mine = ++latest.current
+    const same = snapshot()
     return listInvitations().then(
       (list) => mine === latest.current && setInvitations(list.invitations),
-      (error) => mine === latest.current && fail(error),
+      // 401과 403 NO_HOUSEHOLD는 세션이나 가구가 바뀌었다는 신호라 순번과 관계없이 처리한다(fail이 로그인 세대를 본다).
+      (error) => (isUnauthenticated(error) || isNoHousehold(error) || mine === latest.current) && fail(error, same),
     )
   }
 
@@ -205,6 +212,7 @@ function InvitationArea({
     if (sending.current) return
     sending.current = true
     setNotice(null)
+    const same = snapshot()
     createInvitation(Number(days)).then(
       (created) => {
         sending.current = false
@@ -216,22 +224,31 @@ function InvitationArea({
       },
       (error) => {
         sending.current = false
-        if (errorStatus(error) === 409) reload()
+        if (errorStatus(error) === 409) same() && reload()
         else if (errorCode(error) === 'REAUTH_REQUIRED') setNotice('inviteReauth')
-        else fail(error)
+        else fail(error, same)
       },
     )
   }
 
   const onCancel = (id: number) => {
+    if (cancelling.current.has(id)) return
+    cancelling.current.add(id)
     setNotice(null)
+    const same = snapshot()
     cancelInvitation(id).then(
       () => {
+        cancelling.current.delete(id)
         latest.current++
-        setLink(null)
+        // 늦게 온 옛 초대의 취소가 그 뒤에 만든 초대의 링크를 지우지 않게 같은 초대일 때만 지운다
+        setLink((current) => (current?.id === id ? null : current))
         setInvitations((list) => list.filter((i) => i.id !== id))
       },
-      (error) => (errorStatus(error) === 409 || errorStatus(error) === 404 ? reload() : fail(error)),
+      (error) => {
+        cancelling.current.delete(id)
+        if (errorStatus(error) === 409 || errorStatus(error) === 404) same() && reload()
+        else fail(error, same)
+      },
     )
   }
 
