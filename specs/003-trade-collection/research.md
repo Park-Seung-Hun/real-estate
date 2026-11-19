@@ -197,6 +197,7 @@ sequenceDiagram
 
 - 여유를 두는 이유: 같은 날 뒤 실행(초기 적재나 범위 확장)은 앞 실행의 호출 수를 모르고([R3](#r3-예약-실행)), 실행 확인 때 같은 날 앱을 다시 실행할 수도 있습니다. 한 자치구 매일 수집은 하루 6회라 여유 500이면 수동 실행 여러 번과 재시도를 넉넉히 덮습니다. 초기 적재 한 번은 60회입니다.
 - 재시도 호출도 한 번으로 셉니다(공공데이터포털이 요청마다 세는 것으로 보고 보수적으로 셈. 확인하지 않은 가정).
+- JDK `HttpClient`는 서버가 응답 없이 연결을 끊으면 같은 GET을 내부에서 한 번 더 보냅니다(2026-11-19 가짜 서버로 확인). 그러면 서버가 받는 요청이 시도 수의 두 배까지 늘 수 있고, 실행 안에서 센 호출 수는 시도 수라 실제보다 작을 수 있습니다. 연결이 끊기는 오류가 대량으로 나는 날이 아니면 여유 500 안에서 흡수됩니다. 실제 호출 수와 센 값이 어긋나는지는 T049의 실제 실행에서 확인합니다.
 - 기준값에 도달해도 한도에는 여유가 있으므로 코드 22를 받는 일은 다른 실행이 같은 날 많이 호출했을 때뿐입니다.
 
 ## R9. 설정과 인증키 노출 막기
@@ -213,7 +214,7 @@ sequenceDiagram
 | `estate.collector.connect-timeout`, `read-timeout` | | 5초, 30초 | 양수 |
 | `estate.collector.raw.endpoint`, `region`, `bucket`, `access-key`, `secret-key` | `ESTATE_RAW_S3_ENDPOINT`, `ESTATE_RAW_S3_REGION`, `ESTATE_RAW_S3_BUCKET`, `ESTATE_RAW_S3_ACCESS_KEY`, `ESTATE_RAW_S3_SECRET_KEY` | 주소, 리전, 버킷의 로컬 값은 `application-local.yml`, 키 둘은 `.env` | 지역이 하나라도 있으면 비어 있지 않음 |
 
-- 지역이 비어 있으면 예약 실행은 아무것도 하지 않고 로그 한 줄만 남깁니다. 001, 002 테스트처럼 collector를 쓰지 않는 테스트가 인증키 없이 시작되게 하려는 것입니다. 그래서 S3 클라이언트와 API 어댑터는 지역이 있을 때만 만들고(`@ConditionalOnExpression`으로 지역 설정이 비어 있지 않을 때), 예약 실행은 수집 빈을 `ObjectProvider`로 받아 지역이 있을 때만 꺼냅니다.
+- 지역이 비어 있으면 예약 실행은 아무것도 하지 않고 로그 한 줄만 남깁니다. 001, 002 테스트처럼 collector를 쓰지 않는 테스트가 인증키 없이 시작되게 하려는 것입니다. 그래서 S3 클라이언트와 API 어댑터는 지역이 있을 때만 만들고(`estate.trade.ConditionalOnCollectorRegions`로 지역 설정이 비어 있지 않을 때), 예약 실행은 수집 빈을 `ObjectProvider`로 받아 지역이 있을 때만 꺼냅니다.
 - `.env.example`에는 지역, 예약 시각, collector 키 둘(`ESTATE_RAW_S3_ACCESS_KEY`, `ESTATE_RAW_S3_SECRET_KEY`)을 자리표시 값으로 추가합니다. 주소, 리전, 버킷은 `application-local.yml` 기본값을 씁니다. 인증키 `DATA_GO_KR_SERVICE_KEY`는 이미 있습니다. 데이터 확인 스크립트가 쓰는 `LAWD_CD`는 그대로 둡니다.
 
 인증키가 유출되는 경로와 막는 방법(Spring Framework 7.0.10 소스 확인):
