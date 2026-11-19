@@ -1,32 +1,17 @@
-import { randomUUID } from 'node:crypto'
 import { expect, test, type Page } from '@playwright/test'
+import { expectNoHorizontalScroll, loginWithFakeGoogle } from './support'
 
-// 폭 360px(playwright.config.ts)에서 가로 스크롤이 없어야 한다(FR-021, SC-007).
-async function expectNoHorizontalScroll(page: Page) {
-  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
-  }))
-  expect(scrollWidth).toBeLessThanOrEqual(innerWidth)
-}
-
-// 가짜 구글 서버(mock-oauth2-server)의 로그인 폼을 채운다. 실제 이메일 대신 example.com 주소를 쓴다.
-async function loginWithFakeGoogle(page: Page) {
-  const id = randomUUID()
+// 첫 화면에서 로그인해 가구 없음 화면까지 간다.
+async function loginToNoHousehold(page: Page) {
   await page.goto('/')
-  await page.getByRole('link', { name: 'Google 계정으로 로그인' }).click()
-  await page.locator('input[name="username"]').fill(`e2e-${id}`)
-  await page.locator('textarea[name="claims"]').fill(
-    JSON.stringify({ email: `e2e-${id}@example.com`, email_verified: true, name: '테스트 사용자' }),
-  )
-  await page.locator('input[type="submit"]').click()
+  await loginWithFakeGoogle(page)
   await expect(page.getByText('아직 가구가 없습니다.')).toBeVisible()
 }
 
 test.describe('화면 폭 360px에서 가로 스크롤 없음', () => {
   test('로그인', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByText('가족에게 받은 초대 링크로 들어왔다면 로그인하면 바로 수락됩니다.')).toBeVisible()
+    await expect(page.getByText('가족에게 받은 초대 링크로 들어왔다면 로그인한 뒤 들어갈 가구를 확인합니다.')).toBeVisible()
     await expectNoHorizontalScroll(page)
   })
 
@@ -49,7 +34,11 @@ test.describe('화면 폭 360px에서 가로 스크롤 없음', () => {
   })
 
   test('가구 없음과 탈퇴 확인', async ({ page }) => {
-    await loginWithFakeGoogle(page)
+    await loginToNoHousehold(page)
+    // FR-002: 가구 없음 화면의 안내 셋과 가구 만들기 버튼
+    await expect(page.getByText('가족과 함께 볼 기록을 모으려면 가구를 만드세요.')).toBeVisible()
+    await expect(page.getByText('가족에게 받은 초대 링크가 있으면 그 링크를 여세요.')).toBeVisible()
+    await expect(page.getByRole('button', { name: '가구 만들기' })).toBeVisible()
     await expectNoHorizontalScroll(page)
 
     // 탈퇴 요청은 보내지 않고 확인 화면만 연다
@@ -60,7 +49,7 @@ test.describe('화면 폭 360px에서 가로 스크롤 없음', () => {
 })
 
 test('가짜 구글 로그인부터 로그아웃까지 한 바퀴', async ({ page }) => {
-  await loginWithFakeGoogle(page)
+  await loginToNoHousehold(page)
   await expect(page).toHaveURL('/')
 
   await page.getByRole('button', { name: '로그아웃' }).click()

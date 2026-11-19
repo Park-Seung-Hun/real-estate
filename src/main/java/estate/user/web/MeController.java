@@ -16,6 +16,9 @@ import estate.common.crypto.ColumnCipher;
 import estate.common.web.Problem;
 import estate.common.web.ProblemCode;
 import estate.common.web.ProblemException;
+import estate.household.authz.Access;
+import estate.household.authz.MembershipRule;
+import estate.household.authz.Permission;
 import estate.user.application.WithdrawService;
 import estate.user.domain.DisplayName;
 import estate.user.domain.User;
@@ -46,6 +49,7 @@ class MeController {
     }
 
     @GetMapping("/api/v1/me")
+    @Access(value = Permission.NONE, membership = MembershipRule.OPTIONAL)
     Me me(SessionLoginInfo login) {
         User user = users.findById(login.userId()).orElseThrow(() -> new ProblemException(ProblemCode.UNAUTHENTICATED));
         return toMe(user);
@@ -53,6 +57,7 @@ class MeController {
 
     /** 세션 사용자의 행만 고친다. 행을 잠가 같은 사용자의 로그인 콜백과 한 줄로 선다(research R5). 요청 값은 응답에 담지 않는다. */
     @PatchMapping("/api/v1/me")
+    @Access(value = Permission.PROFILE_WRITE, membership = MembershipRule.OPTIONAL)
     @Transactional
     Me updateMe(SessionLoginInfo login, @RequestBody UpdateMe request) {
         // 키 없음은 null, JSON null은 NullNode로 온다. 둘 다 문자열 노드가 아니다
@@ -74,6 +79,7 @@ class MeController {
 
     /** 서비스가 커밋한 뒤에 현재 세션을 무효화한다. 요청 끝에 Spring Session이 지워진 행을 다시 저장하지 않고 쿠키 삭제를 쓴다. */
     @DeleteMapping("/api/v1/me")
+    @Access(value = Permission.NONE, membership = MembershipRule.ABSENT)
     ResponseEntity<Void> withdraw(SessionLoginInfo login, HttpServletRequest request) {
         withdrawService.withdraw(login.userId(), login.lastGoogleAuthAt());
         request.getSession(false).invalidate();

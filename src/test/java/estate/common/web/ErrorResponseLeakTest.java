@@ -2,18 +2,12 @@ package estate.common.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
-import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,14 +17,12 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
-import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import estate.support.FakeGoogleServer;
-import estate.support.GoogleAccount;
 import estate.support.LoginClient;
 import estate.support.LoginIntegrationTest;
+import estate.support.RealServerClient;
 
 /**
  * 오류 본문의 요청 값 비반사(FR-020, tasks T012 "오류 본문과 로그에 요청 값을 그대로 넣지 않는다", API 공통 규칙 오류 응답 절의 application/problem+json).
@@ -45,21 +37,26 @@ import estate.support.LoginIntegrationTest;
 @ExtendWith(OutputCaptureExtension.class)
 class ErrorResponseLeakTest {
 
-    static final String ORIGIN = "https://localhost";
+    static final String ORIGIN = RealServerClient.ORIGIN;
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @LocalServerPort
     int port;
 
-    private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
+    private RealServerClient server;
+
+    @BeforeEach
+    void setUp() {
+        server = new RealServerClient(port);
+    }
 
     @Test
     @DisplayName("FR-020: 로그인 상태의 GET /api/v1/logout(POST만 받음) 오류 본문에 경로와 표식이 없다")
     void methodNotAllowedDoesNotEcho() throws Exception {
-        String session = loginOnRealServer();
+        String session = server.login();
         String marker = marker();
 
-        HttpResponse<String> response = send(HttpRequest.newBuilder(url("/api/v1/logout?" + marker)).GET()
+        HttpResponse<String> response = server.send(HttpRequest.newBuilder(server.url("/api/v1/logout?" + marker)).GET()
                 .header("Cookie", LoginClient.SESSION_COOKIE + "=" + session));
 
         assertThat(response.statusCode()).isEqualTo(405);
@@ -69,10 +66,10 @@ class ErrorResponseLeakTest {
     @Test
     @DisplayName("FR-020: 로그인 상태에서 방화벽이 거절한 경로(세미콜론)의 400 본문에 경로와 표식이 없다")
     void firewallRejectionDoesNotEchoWhenLoggedIn() throws Exception {
-        String session = loginOnRealServer();
+        String session = server.login();
         String marker = marker();
 
-        HttpResponse<String> response = send(HttpRequest.newBuilder(url("/api/v1/x;" + marker)).GET()
+        HttpResponse<String> response = server.send(HttpRequest.newBuilder(server.url("/api/v1/x;" + marker)).GET()
                 .header("Cookie", LoginClient.SESSION_COOKIE + "=" + session));
 
         assertThat(response.statusCode()).isEqualTo(400);
@@ -84,7 +81,7 @@ class ErrorResponseLeakTest {
     void firewallRejectionDoesNotEchoWithoutLogin() throws Exception {
         String marker = marker();
 
-        HttpResponse<String> response = send(HttpRequest.newBuilder(url("/api/v1/x;" + marker)).GET());
+        HttpResponse<String> response = server.send(HttpRequest.newBuilder(server.url("/api/v1/x;" + marker)).GET());
 
         assertThat(response.statusCode()).isEqualTo(400);
         assertNoEcho(response, "/api/v1/x", marker);
@@ -93,10 +90,10 @@ class ErrorResponseLeakTest {
     @Test
     @DisplayName("FR-020: 로그인 상태의 POST /api/v1/logout 에 깨진 JSON 본문을 보내도 오류 본문에 경로와 표식이 없다(상태 코드는 정하지 않음)")
     void brokenJsonBodyDoesNotEcho() throws Exception {
-        String session = loginOnRealServer();
+        String session = server.login();
         String marker = marker();
 
-        HttpResponse<String> response = send(HttpRequest.newBuilder(url("/api/v1/logout?" + marker))
+        HttpResponse<String> response = server.send(HttpRequest.newBuilder(server.url("/api/v1/logout?" + marker))
                 .POST(HttpRequest.BodyPublishers.ofString("{\"" + marker + "\": "))
                 .header("Content-Type", "application/json")
                 .header("Origin", ORIGIN)
@@ -108,7 +105,7 @@ class ErrorResponseLeakTest {
     @Test
     @DisplayName("T057 FR-018 FR-020 실서버: 21자 이름의 PATCH /api/v1/me 는 400 VALIDATION_FAILED, pointer #/displayName, 정한 문구이고 본문에 보낸 이름이 없다")
     void tooLongDisplayNameOnRealServer() throws Exception {
-        String session = loginOnRealServer();
+        String session = server.login();
         // 코드 포인트 21개: "긴이름" 3자와 고유한 16진수 18자
         String name = "긴이름" + UUID.randomUUID().toString().replace("-", "").substring(0, 18);
         assertThat(name.codePointCount(0, name.length())).isEqualTo(21);
@@ -125,7 +122,7 @@ class ErrorResponseLeakTest {
     @Test
     @DisplayName("T057 FR-017 FR-020 실서버: 알 수 없는 필드(loginEmail)가 있는 PATCH /api/v1/me 는 400 VALIDATION_FAILED, pointer #, 정한 문구이고 본문에 필드 이름과 값이 없다")
     void unknownFieldOnRealServer() throws Exception {
-        String session = loginOnRealServer();
+        String session = server.login();
 
         HttpResponse<String> response = patchMe(session, "{\"displayName\":\"이름\",\"loginEmail\":\"leak@example.com\"}");
 
@@ -139,7 +136,7 @@ class ErrorResponseLeakTest {
     @Test
     @DisplayName("T057 FR-020 계약 Problem.code 필수 실서버: 깨진 JSON의 PATCH /api/v1/me 는 400 VALIDATION_FAILED, pointer #, 읽을 수 없다는 문구이고 본문에 보낸 조각이 없다")
     void brokenJsonPatchMeOnRealServer() throws Exception {
-        String session = loginOnRealServer();
+        String session = server.login();
         String marker = marker();
 
         HttpResponse<String> response = patchMe(session, "{\"displayName\":\"" + marker);
@@ -157,7 +154,7 @@ class ErrorResponseLeakTest {
     void unknownLoginProviderOnRealServer(CapturedOutput output) throws Exception {
         String email = "leak-" + UUID.randomUUID() + "@example.com";
         for (String provider : new String[] {email, "github"}) {
-            HttpResponse<String> response = send(HttpRequest.newBuilder(url("/oauth2/authorization/" + provider)).GET());
+            HttpResponse<String> response = server.send(HttpRequest.newBuilder(server.url("/oauth2/authorization/" + provider)).GET());
 
             expectProblem(response, 404);
             assertThat(response.body()).as("404 본문이 있어야 비반사 검사가 의미 있다").isNotBlank();
@@ -175,7 +172,7 @@ class ErrorResponseLeakTest {
     @Test
     @DisplayName("FR-018 계약 Problem.code 필수 실서버: 본문이 빈 PATCH /api/v1/me 는 400 VALIDATION_FAILED, pointer #, 읽을 수 없다는 문구다")
     void emptyBodyPatchMeOnRealServer() throws Exception {
-        String session = loginOnRealServer();
+        String session = server.login();
 
         HttpResponse<String> response = patchMe(session, "");
 
@@ -187,7 +184,7 @@ class ErrorResponseLeakTest {
     }
 
     private HttpResponse<String> patchMe(String session, String body) throws Exception {
-        return send(HttpRequest.newBuilder(url("/api/v1/me"))
+        return server.send(HttpRequest.newBuilder(server.url("/api/v1/me"))
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                 .header("Content-Type", "application/json")
                 .header("Origin", ORIGIN)
@@ -215,68 +212,6 @@ class ErrorResponseLeakTest {
             assertThat(MediaType.parseMediaType(contentType).isCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .as("오류 본문은 application/problem+json: " + contentType).isTrue();
         }
-    }
-
-    /** 실제 서버 주소로 로그인 시작, 가짜 구글 인가, 콜백을 돌고 세션 쿠키 값을 준다. 그 쿠키로 /api/v1/me 200까지 확인한다. */
-    private String loginOnRealServer() throws Exception {
-        String id = UUID.randomUUID().toString();
-        GoogleAccount account = GoogleAccount.of("leak-" + id, "leak-" + id + "@example.com");
-        FakeGoogleServer.willReturn(account);
-
-        HttpResponse<String> start = send(HttpRequest.newBuilder(url("/oauth2/authorization/google")).GET());
-        assertThat(start.statusCode()).as("로그인 시작은 구글로 보낸다").isEqualTo(302);
-        Map<String, String> loginCookies = setCookies(start);
-
-        String authorize = start.headers().firstValue("Location").orElseThrow();
-        HttpResponse<String> first = send(HttpRequest.newBuilder(URI.create(authorize)).GET());
-        // prompt 때문에 가짜 서버가 로그인 폼(200)을 주면 예약한 계정으로 폼을 보낸다(LoginClient.authorize와 같은 방식)
-        HttpResponse<String> authorized = first.statusCode() != 200 ? first : send(HttpRequest.newBuilder(URI.create(authorize))
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString("username=" + URLEncoder.encode(account.sub(), StandardCharsets.UTF_8)
-                        + "&claims=" + URLEncoder.encode(JSON.writeValueAsString(account.claims()), StandardCharsets.UTF_8))));
-        String callbackUrl = authorized.headers().firstValue("Location").orElseThrow(
-                () -> new IllegalStateException("가짜 서버 인가가 리디렉션하지 않음: " + authorized.statusCode()));
-        assertThat(UriComponentsBuilder.fromUriString(callbackUrl).build().getQueryParams()).containsKey("code");
-
-        HttpResponse<String> callback = send(HttpRequest.newBuilder(URI.create(callbackUrl)).GET()
-                .header("Cookie", loginCookies.entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).collect(Collectors.joining("; "))));
-        String session = setCookies(callback).get(LoginClient.SESSION_COOKIE);
-        assertThat(session).as("콜백이 세션 쿠키를 발급해야 한다").isNotNull();
-
-        HttpResponse<String> me = send(HttpRequest.newBuilder(url("/api/v1/me")).GET()
-                .header("Cookie", LoginClient.SESSION_COOKIE + "=" + session));
-        assertThat(me.statusCode()).as("실제 서버에서 로그인 상태가 통해야 오류 경우가 401로 새지 않는다").isEqualTo(200);
-        return session;
-    }
-
-    /** 응답의 Set-Cookie 가운데 값이 있고 Max-Age=0이 아닌 것(같은 이름이면 마지막 줄). */
-    private static Map<String, String> setCookies(HttpResponse<?> response) {
-        Map<String, String> cookies = new LinkedHashMap<>();
-        for (String header : response.headers().allValues("Set-Cookie")) {
-            String[] parts = header.split(";");
-            int eq = parts[0].indexOf('=');
-            String name = parts[0].substring(0, eq).trim();
-            String value = parts[0].substring(eq + 1).trim();
-            boolean deletion = value.isEmpty();
-            for (int i = 1; i < parts.length; i++) {
-                String a = parts[i].trim().toLowerCase(Locale.ROOT);
-                deletion |= a.startsWith("max-age=") && a.substring(8).trim().matches("-?0+|-\\d+");
-            }
-            if (deletion) {
-                cookies.remove(name);
-            } else {
-                cookies.put(name, value);
-            }
-        }
-        return cookies;
-    }
-
-    private HttpResponse<String> send(HttpRequest.Builder request) throws Exception {
-        return http.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-    }
-
-    private URI url(String pathAndQuery) {
-        return URI.create("http://localhost:" + port + pathAndQuery);
     }
 
     private static String marker() {

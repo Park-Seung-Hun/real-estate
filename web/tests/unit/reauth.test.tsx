@@ -11,7 +11,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/App'
-import { type ApiCall, me, mockApi, type Reply, settle, unauthenticated, watchNavigation } from './api-mock'
+import { type ApiCall, me, mockApi, noHousehold, type Reply, settle, unauthenticated, watchNavigation } from './api-mock'
 
 const WITHDRAW = '탈퇴'
 const WITHDRAW_NOTICE = '탈퇴하면 계정, 로그인 이메일, 표시 이름과 모든 기기의 로그인 상태가 삭제되며 되돌릴 수 없습니다.'
@@ -60,6 +60,7 @@ function openAt(path: string) {
 
 const needsReauth = (call: ApiCall) => {
   if (call.method === 'GET' && call.path === '/api/v1/me') return me
+  if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
   if (call.method === 'DELETE' && call.path === '/api/v1/me') return reauthRequired
   return undefined
 }
@@ -96,7 +97,10 @@ describe('재인증 실패 화면', () => {
     { label: '401', reply: unauthenticated },
     { label: '200', reply: me },
   ])('US2-4: /me 가 $label 이어도 /reauth-failed 는 기본 실패 문구를 보인다', async ({ reply }) => {
-    api = mockApi((call) => (call.method === 'GET' && call.path === '/api/v1/me' ? reply : undefined))
+    api = mockApi((call) => {
+      if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
+      return call.method === 'GET' && call.path === '/api/v1/me' ? reply : undefined
+    })
     openAt('/reauth-failed')
     await screen.findByText(REAUTH_FAILED)
     expect(screen.queryByText(ACCOUNT_MISMATCH)).toBeNull()

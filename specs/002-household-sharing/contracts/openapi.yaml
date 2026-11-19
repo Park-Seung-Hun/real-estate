@@ -1,0 +1,711 @@
+openapi: 3.1.0
+info:
+  title: 002 가구와 가족 공유
+  version: 0.1.0
+  description: >
+    가구 만들기와 삭제, 함께 보는 사람 목록, 구성원 제거, 가구 나가기, 초대 발급과 취소와 목록, 초대 확인과 수락의 계약이고,
+    001의 탈퇴에 409를 추가합니다. 001 계약(specs/001-login/contracts/openapi.yaml)에 있는 경로는 탈퇴의 409만 다시 적습니다.
+    형식과 권한 표기는 docs/architecture/api-conventions.md를 따릅니다.
+    상태를 바꾸는 요청(POST, PATCH, DELETE)의 Origin 검사(403 ORIGIN_REJECTED)는 001과 같고 로그인 상태 확인(401) 뒤에 합니다.
+    요청은 401, 403 ORIGIN_REJECTED, 멤버십(403 NO_HOUSEHOLD 또는 409 HAS_HOUSEHOLD), 권한 키(403 PERMISSION_DENIED),
+    경로 자원(404 NOT_FOUND), 자기 자신 제거(403 PERMISSION_DENIED), 재인증(401 REAUTH_REQUIRED), 입력 검증(400), 상태 충돌(409) 순서로 확인하고
+    처음 걸린 것으로 응답합니다.
+    x-permission이 none이면서 멤버십 없이 허용하는 동작은 초대 확인, 초대 수락이고, 멤버십이 있으면 409인 동작은 가구 만들기와 탈퇴입니다.
+    그 밖의 경로는 멤버십이 없으면 403 NO_HOUSEHOLD입니다.
+    시각은 Asia/Seoul 오프셋(+09:00)을 붙인 ISO 8601입니다.
+    각 경로에 적지 않은 오류(없는 경로 404, 405, 415, 500)는 001과 같이 Problem 형식이지만 code가 없습니다.
+paths:
+  /api/v1/household:
+    post:
+      summary: 가구 만들기
+      description: 세션 사용자를 owner로 하는 가구를 만듭니다. 가구 이름은 없습니다.
+      security:
+        - sessionCookie: []
+      x-permission: none
+      x-household-scope: false
+      x-owner-only: false
+      x-reauth: false
+      responses:
+        "201":
+          description: 가구를 만들었습니다. 본문은 없습니다.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/OriginRejected"
+        "409":
+          $ref: "#/components/responses/HasHousehold"
+    get:
+      summary: 함께 보는 사람 목록
+      description: 내 가구의 구성원을 owner, member 순서로 반환합니다.
+      security:
+        - sessionCookie: []
+      x-permission: household:read
+      x-household-scope: true
+      x-owner-only: false
+      x-reauth: false
+      responses:
+        "200":
+          description: 구성원 목록입니다.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Members"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/NoHousehold"
+    delete:
+      summary: 가구 삭제
+      description: >
+        가구 행을 잠근 뒤 그 가구의 초대, 멤버십, 가구 행을 한 트랜잭션에서 삭제합니다.
+        구성원이었던 사람의 사용자 행과 세션은 남고, 다음 가구 요청부터 403 NO_HOUSEHOLD입니다.
+      security:
+        - sessionCookie: []
+      x-permission: household:delete
+      x-household-scope: true
+      x-owner-only: false
+      x-reauth: true
+      responses:
+        "204":
+          description: 가구를 삭제했습니다.
+        "401":
+          $ref: "#/components/responses/UnauthenticatedOrReauth"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/household/membership:
+    delete:
+      summary: 가구 나가기
+      description: 세션 사용자의 멤버십 행만 삭제합니다. 사용자 행과 세션은 남습니다. owner는 권한 키가 없어 403입니다.
+      security:
+        - sessionCookie: []
+      x-permission: member:leave
+      x-household-scope: true
+      x-owner-only: false
+      x-reauth: false
+      responses:
+        "204":
+          description: 가구를 나갔습니다.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/household/members/{userId}:
+    delete:
+      summary: 구성원 제거
+      description: >
+        내 가구의 다른 구성원의 멤버십 행만 삭제합니다. 사용자 행과 세션은 남습니다.
+        경로의 사람이 내 가구의 구성원이 아니면(다른 가구, 없는 번호, 숫자가 아닌 값) 같은 404 본문입니다.
+        자기 자신이면 재인증보다 먼저 403입니다. 이 거절은 x-owner-only(false)와 별개의 5단계 확인입니다.
+      security:
+        - sessionCookie: []
+      x-permission: member:remove
+      x-household-scope: true
+      x-owner-only: false
+      x-reauth: true
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: 함께 보는 사람 목록의 userId입니다.
+          schema:
+            type: string
+            examples: ["42"]
+      responses:
+        "204":
+          description: 구성원을 제거했습니다.
+        "401":
+          $ref: "#/components/responses/UnauthenticatedOrReauth"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/household/invitations:
+    get:
+      summary: 보낸 초대 목록
+      description: 내 가구의 수락 대기 중이면서 만료되지 않은 초대만 반환합니다. 링크와 토큰은 담지 않습니다.
+      security:
+        - sessionCookie: []
+      x-permission: invitation:read
+      x-household-scope: true
+      x-owner-only: false
+      x-reauth: false
+      responses:
+        "200":
+          description: 보낸 초대 목록입니다. 없으면 빈 배열입니다.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitations"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/ForbiddenRead"
+    post:
+      summary: 초대 발급
+      description: >
+        재인증을 확인한 뒤 본문을 검증하고, 가구 행을 잠근 뒤 구성원이 둘이거나 수락 대기 중이면서 만료되지 않은 초대가 있으면 409입니다.
+        토큰 원문은 이 응답에만 담고 서버는 해시만 저장합니다. 화면이 {서비스 주소}/invite#{token}으로 링크를 만듭니다.
+        본문을 읽을 수 없어도(깨진 JSON) 재인증 확인이 먼저입니다.
+      security:
+        - sessionCookie: []
+      x-permission: invitation:create
+      x-household-scope: true
+      x-owner-only: false
+      x-reauth: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitation"
+      responses:
+        "201":
+          description: 초대를 발급했습니다.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedInvitation"
+        "400":
+          description: >
+            만료 기간이 없거나 1부터 7까지의 JSON 정수가 아닙니다(pointer #/expiresInDays).
+            다른 키가 있거나, 본문이 객체가 아니거나, 깨진 JSON이거나, 빈 본문입니다(pointer #).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              examples:
+                expiresInDays:
+                  value:
+                    type: https://example.com/problems/validation-failed
+                    title: 입력값이 올바르지 않습니다
+                    status: 400
+                    detail: 입력값 하나를 확인해 주세요.
+                    code: VALIDATION_FAILED
+                    errors:
+                      - pointer: "#/expiresInDays"
+                        detail: 만료 기간은 1일부터 7일까지 고를 수 있습니다.
+                body:
+                  value:
+                    type: https://example.com/problems/validation-failed
+                    title: 입력값이 올바르지 않습니다
+                    status: 400
+                    detail: 입력값 하나를 확인해 주세요.
+                    code: VALIDATION_FAILED
+                    errors:
+                      - pointer: "#"
+                        detail: 알 수 없는 필드가 있습니다.
+        "401":
+          $ref: "#/components/responses/UnauthenticatedOrReauth"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: 구성원이 이미 둘이거나 수락 대기 중인 초대가 있습니다.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              examples:
+                full:
+                  value:
+                    type: https://example.com/problems/household-full
+                    title: 구성원이 이미 둘입니다
+                    status: 409
+                    detail: 가구 구성원은 둘까지입니다.
+                    code: HOUSEHOLD_FULL
+                pending:
+                  value:
+                    type: https://example.com/problems/invitation-pending
+                    title: 수락 대기 중인 초대가 있습니다
+                    status: 409
+                    detail: 수락 대기 중인 초대를 취소한 뒤 다시 시도해 주세요.
+                    code: INVITATION_PENDING
+  /api/v1/household/invitations/{invitationId}:
+    delete:
+      summary: 초대 취소
+      description: >
+        내 가구의 수락 대기 중이면서 만료되지 않은 초대를 취소 상태로 바꿉니다. 행은 삭제하지 않습니다.
+        경로의 초대가 내 가구의 것이 아니면(다른 가구, 없는 번호, 숫자가 아닌 값) 같은 404 본문입니다.
+      security:
+        - sessionCookie: []
+      x-permission: invitation:revoke
+      x-household-scope: true
+      x-owner-only: false
+      x-reauth: false
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          description: 보낸 초대 목록이나 발급 응답의 id입니다.
+          schema:
+            type: string
+            examples: ["7"]
+      responses:
+        "204":
+          description: 초대를 취소했습니다. 그 링크는 사용할 수 없습니다.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: 이미 수락되었거나 취소되었거나 만료된 초대입니다. 초대는 바뀌지 않습니다.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: https://example.com/problems/invitation-not-pending
+                title: 취소할 수 없는 초대입니다
+                status: 409
+                detail: 이미 수락되었거나 취소되었거나 만료된 초대입니다.
+                code: INVITATION_NOT_PENDING
+  /api/v1/invitations/preview:
+    post:
+      summary: 초대 확인
+      description: >
+        링크의 토큰으로 수락할 수 있는지 확인하고, 수락할 수 있으면 초대한 owner의 표시 이름만 반환합니다. 상태를 바꾸지 않습니다.
+        토큰이 주소와 접근 기록에 남지 않게 본문으로 받으려고 POST입니다. 멤버십이 없어도 받습니다.
+        수락할 수 없으면 링크 자체의 사유(없음, 취소, 사용됨, 만료, 구성원 둘)를 먼저, 그다음 여는 사람의 사유(이 가구의 구성원, 다른 가구에 속함)를 응답합니다.
+      security:
+        - sessionCookie: []
+      x-permission: none
+      x-household-scope: false
+      x-owner-only: false
+      x-reauth: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationToken"
+      responses:
+        "200":
+          description: 수락할 수 있는 초대입니다.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationPreview"
+        "400":
+          $ref: "#/components/responses/TokenValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/OriginRejected"
+        "404":
+          $ref: "#/components/responses/InvitationNotFound"
+        "409":
+          $ref: "#/components/responses/InvitationRejected"
+  /api/v1/invitations/accept:
+    post:
+      summary: 초대 수락
+      description: >
+        초대한 가구 행을 잠근 뒤 초대 확인과 같은 순서로 다시 확인하고, 통과하면 초대를 수락 상태로 바꾼 뒤 세션 사용자를 그 가구의 member로 만듭니다(데이터 모델의 순서).
+        같은 링크의 동시 수락 중 한 건만 성공합니다. 거절은 초대의 상태를 바꾸지 않습니다. 멤버십이 없어도 받습니다.
+      security:
+        - sessionCookie: []
+      x-permission: none
+      x-household-scope: false
+      x-owner-only: false
+      x-reauth: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationToken"
+      responses:
+        "204":
+          description: 가구에 들어왔습니다.
+        "400":
+          $ref: "#/components/responses/TokenValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/OriginRejected"
+        "404":
+          $ref: "#/components/responses/InvitationNotFound"
+        "409":
+          $ref: "#/components/responses/InvitationRejected"
+  /api/v1/me:
+    delete:
+      summary: 탈퇴(001에 409를 추가)
+      description: >
+        멤버십이 있으면 재인증 확인보다 먼저 409입니다. 계정, 멤버십, 세션은 그대로입니다.
+        그 밖의 응답(204, 401, 403)은 001 계약과 같습니다.
+      security:
+        - sessionCookie: []
+      x-permission: none
+      x-household-scope: false
+      x-owner-only: false
+      x-reauth: true
+      responses:
+        "409":
+          $ref: "#/components/responses/HasHousehold"
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-Http-session
+  schemas:
+    Members:
+      type: object
+      required: [members]
+      properties:
+        members:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/Member"
+    Member:
+      type: object
+      required: [userId, displayName, role, loginEmail, emailVerified, me]
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 구성원 제거 경로에 사용합니다.
+        displayName:
+          type: [string, "null"]
+          examples: ["엄마"]
+        role:
+          type: string
+          enum: [owner, member]
+        loginEmail:
+          type: string
+          format: email
+          examples: ["user1@example.com"]
+        emailVerified:
+          type: boolean
+        me:
+          type: boolean
+          description: 요청한 사람 자신이면 true입니다. 화면이 "(나)"를 붙입니다.
+    Invitations:
+      type: object
+      required: [invitations]
+      properties:
+        invitations:
+          type: array
+          maxItems: 1
+          items:
+            $ref: "#/components/schemas/Invitation"
+    Invitation:
+      type: object
+      required: [id, createdAt, expiresAt, remainingDays]
+      properties:
+        id:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+          examples: ["2026-11-17T09:30:00+09:00"]
+        expiresAt:
+          type: string
+          format: date-time
+          examples: ["2026-11-20T09:30:00+09:00"]
+        remainingDays:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: 만료까지 남은 시간을 하루 단위로 올림한 값이고 최소 1입니다. 화면은 "N일 남음"으로 보입니다.
+    CreateInvitation:
+      type: object
+      required: [expiresInDays]
+      additionalProperties: false
+      properties:
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: JSON 정수만 받습니다. 1.5, 3.0, "3", true, null은 400입니다.
+          examples: [3]
+    CreatedInvitation:
+      type: object
+      required: [id, token, createdAt, expiresAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        token:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          description: 32바이트 무작위 값의 base64url(패딩 없음)입니다. 이 응답에만 담깁니다.
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: createdAt에 expiresInDays 곱하기 24시간을 더한 시각입니다.
+    InvitationToken:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          description: 링크의 # 뒤 값입니다. 문자열이 아니면 400, 43자 base64url이 아니면 404 NOT_FOUND입니다.
+    InvitationPreview:
+      type: object
+      required: [inviterDisplayName]
+      properties:
+        inviterDisplayName:
+          type: [string, "null"]
+          description: 초대를 발급한 owner의 현재 표시 이름입니다. 비어 있으면 null입니다. 이메일과 구성원 목록은 담지 않습니다.
+          examples: ["민지"]
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+          enum:
+            - UNAUTHENTICATED
+            - REAUTH_REQUIRED
+            - VALIDATION_FAILED
+            - ORIGIN_REJECTED
+            - NO_HOUSEHOLD
+            - PERMISSION_DENIED
+            - NOT_FOUND
+            - HAS_HOUSEHOLD
+            - HOUSEHOLD_FULL
+            - INVITATION_PENDING
+            - INVITATION_NOT_PENDING
+            - INVITATION_REVOKED
+            - INVITATION_USED
+            - INVITATION_EXPIRED
+            - ALREADY_IN_THIS_HOUSEHOLD
+        errors:
+          type: array
+          items:
+            type: object
+            required: [pointer, detail]
+            properties:
+              pointer:
+                type: string
+              detail:
+                type: string
+  responses:
+    Unauthenticated:
+      description: 로그인 상태가 없거나 만료되었습니다.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://example.com/problems/unauthenticated
+            title: 로그인이 필요합니다
+            status: 401
+            detail: 다시 로그인해 주세요.
+            code: UNAUTHENTICATED
+    UnauthenticatedOrReauth:
+      description: 로그인 상태가 없거나(UNAUTHENTICATED) 마지막 구글 인증이 5분보다 오래됐습니다(REAUTH_REQUIRED).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            unauthenticated:
+              value:
+                type: https://example.com/problems/unauthenticated
+                title: 로그인이 필요합니다
+                status: 401
+                detail: 다시 로그인해 주세요.
+                code: UNAUTHENTICATED
+            reauthRequired:
+              value:
+                type: https://example.com/problems/reauth-required
+                title: 구글 계정 확인이 필요합니다
+                status: 401
+                detail: 구글 계정을 한 번 더 확인한 뒤 다시 시도해 주세요.
+                code: REAUTH_REQUIRED
+    OriginRejected:
+      description: 상태를 바꾸는 요청의 Origin(없으면 Referer)이 서비스 주소가 아닙니다.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://example.com/problems/origin-rejected
+            title: 허용하지 않은 요청입니다
+            status: 403
+            detail: 서비스 화면에서 다시 시도해 주세요.
+            code: ORIGIN_REJECTED
+    NoHousehold:
+      description: 멤버십이 없습니다.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://example.com/problems/no-household
+            title: 가구가 없습니다
+            status: 403
+            detail: 가구를 만들거나 초대 링크로 들어온 뒤 다시 시도해 주세요.
+            code: NO_HOUSEHOLD
+    Forbidden:
+      description: >
+        Origin이 다르거나(ORIGIN_REJECTED), 멤버십이 없거나(NO_HOUSEHOLD), 역할에 권한 키가 없거나 자기 자신을 제거하려 합니다(PERMISSION_DENIED).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            originRejected:
+              value:
+                type: https://example.com/problems/origin-rejected
+                title: 허용하지 않은 요청입니다
+                status: 403
+                detail: 서비스 화면에서 다시 시도해 주세요.
+                code: ORIGIN_REJECTED
+            noHousehold:
+              value:
+                type: https://example.com/problems/no-household
+                title: 가구가 없습니다
+                status: 403
+                detail: 가구를 만들거나 초대 링크로 들어온 뒤 다시 시도해 주세요.
+                code: NO_HOUSEHOLD
+            permissionDenied:
+              value:
+                type: https://example.com/problems/permission-denied
+                title: 할 수 없는 동작입니다
+                status: 403
+                detail: 이 가구에서 할 수 없는 동작입니다.
+                code: PERMISSION_DENIED
+    ForbiddenRead:
+      description: >
+        상태를 바꾸지 않는 요청(GET)의 403입니다. Origin 검사를 받지 않으므로 멤버십이 없거나(NO_HOUSEHOLD) 역할에 권한 키가 없습니다(PERMISSION_DENIED).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            noHousehold:
+              value:
+                type: https://example.com/problems/no-household
+                title: 가구가 없습니다
+                status: 403
+                detail: 가구를 만들거나 초대 링크로 들어온 뒤 다시 시도해 주세요.
+                code: NO_HOUSEHOLD
+            permissionDenied:
+              value:
+                type: https://example.com/problems/permission-denied
+                title: 할 수 없는 동작입니다
+                status: 403
+                detail: 이 가구에서 할 수 없는 동작입니다.
+                code: PERMISSION_DENIED
+    NotFound:
+      description: 경로의 자원이 없거나 내 가구의 것이 아닙니다. 두 경우의 본문이 같습니다.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://example.com/problems/not-found
+            title: 찾을 수 없습니다
+            status: 404
+            detail: 주소를 확인해 주세요.
+            code: NOT_FOUND
+    InvitationNotFound:
+      description: 토큰이 형식에 맞지 않거나, 그 토큰의 초대가 없거나, 초대한 가구가 삭제되었습니다.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://example.com/problems/not-found
+            title: 찾을 수 없습니다
+            status: 404
+            detail: 주소를 확인해 주세요.
+            code: NOT_FOUND
+    HasHousehold:
+      description: 이미 가구가 있습니다(가구 만들기, 탈퇴).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://example.com/problems/has-household
+            title: 이미 가구가 있습니다
+            status: 409
+            detail: 가구를 나가거나 삭제한 뒤 다시 시도해 주세요.
+            code: HAS_HOUSEHOLD
+    TokenValidationFailed:
+      description: token이 없거나 문자열이 아니거나(pointer #/token), 다른 키가 있거나 본문을 읽을 수 없습니다(pointer #).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://example.com/problems/validation-failed
+            title: 입력값이 올바르지 않습니다
+            status: 400
+            detail: 입력값 하나를 확인해 주세요.
+            code: VALIDATION_FAILED
+            errors:
+              - pointer: "#/token"
+                detail: 초대 링크를 확인해 주세요.
+    InvitationRejected:
+      description: >
+        수락할 수 없는 초대입니다. 여러 사유에 걸리면 위에서부터 첫 사유로 응답합니다:
+        INVITATION_REVOKED, INVITATION_USED, INVITATION_EXPIRED, HOUSEHOLD_FULL, ALREADY_IN_THIS_HOUSEHOLD, HAS_HOUSEHOLD.
+        응답에는 그 가구의 구성원 정보를 담지 않습니다.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            revoked:
+              value:
+                type: https://example.com/problems/invitation-revoked
+                title: 취소된 초대 링크입니다
+                status: 409
+                detail: 가족에게 새 초대 링크를 받아 주세요.
+                code: INVITATION_REVOKED
+            used:
+              value:
+                type: https://example.com/problems/invitation-used
+                title: 이미 사용된 초대 링크입니다
+                status: 409
+                detail: 가족에게 새 초대 링크를 받아 주세요.
+                code: INVITATION_USED
+            expired:
+              value:
+                type: https://example.com/problems/invitation-expired
+                title: 초대 링크가 만료되었습니다
+                status: 409
+                detail: 가족에게 새 초대 링크를 받아 주세요.
+                code: INVITATION_EXPIRED
+            full:
+              value:
+                type: https://example.com/problems/household-full
+                title: 구성원이 이미 둘입니다
+                status: 409
+                detail: 가구 구성원은 둘까지입니다.
+                code: HOUSEHOLD_FULL
+            alreadyInThisHousehold:
+              value:
+                type: https://example.com/problems/already-in-this-household
+                title: 이미 이 가구의 구성원입니다
+                status: 409
+                detail: 링크는 가족에게 보내세요.
+                code: ALREADY_IN_THIS_HOUSEHOLD
+            hasHousehold:
+              value:
+                type: https://example.com/problems/has-household
+                title: 이미 가구가 있습니다
+                status: 409
+                detail: 가구를 나가거나 삭제한 뒤 다시 시도해 주세요.
+                code: HAS_HOUSEHOLD

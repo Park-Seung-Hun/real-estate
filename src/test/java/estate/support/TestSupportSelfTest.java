@@ -39,6 +39,8 @@ class TestSupportSelfTest {
     SessionRows sessions;
     @Autowired
     JdbcClient jdbc;
+    @Autowired
+    javax.sql.DataSource dataSource;
 
     @Test
     void 가짜_서버가_discovery_문서를_돌려준다() throws Exception {
@@ -270,5 +272,26 @@ class TestSupportSelfTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> sessions.shiftBackBySessionId(SessionRows.idOfCookie("none"), Duration.ZERO, Duration.ZERO, Duration.ZERO))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void awaitWaiting은_기다리는_쪽이_있으면_돌아오고_없으면_상한_뒤_예외를_던진다() throws Exception {
+        long id = jdbc.sql("select nextval('household_id_seq')").query(Long.class).single();
+        jdbc.sql("insert into household (id) values (:id)").param("id", id).update();
+        try (HouseholdLock lock = HouseholdLock.holding(dataSource, id)) {
+            assertThatThrownBy(() -> lock.awaitWaiting(1, Duration.ofMillis(300))).isInstanceOf(IllegalStateException.class);
+
+            // 둘째 대기자는 첫 대기자에게 막히므로 둘 이상이어야 대기 수 조회의 조건을 검증한다
+            Runnable wait = () -> jdbc.sql("select id from household where id = :id for update").param("id", id).query(Long.class).single();
+            var first = java.util.concurrent.CompletableFuture.runAsync(wait);
+            var second = java.util.concurrent.CompletableFuture.runAsync(wait);
+            lock.awaitWaiting(2);
+            assertThat(first).isNotDone();
+            assertThat(second).isNotDone();
+
+            lock.rollback();
+            first.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            second.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
     }
 }

@@ -10,7 +10,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/App'
-import { type ApiCall, me, mockApi, noContent, type Reply, settle, unauthenticated, watchNavigation } from './api-mock'
+import { type ApiCall, me, mockApi, noContent, noHousehold, type Reply, settle, unauthenticated, watchNavigation } from './api-mock'
 
 const WITHDRAW = '탈퇴'
 const WITHDRAW_NOTICE = '탈퇴하면 계정, 로그인 이메일, 표시 이름과 모든 기기의 로그인 상태가 삭제되며 되돌릴 수 없습니다.'
@@ -65,6 +65,7 @@ function server() {
   const state = { reauthed: false, session: true }
   const handler = (call: ApiCall) => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return state.session ? me : unauthenticated
+    if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
     if (call.method === 'DELETE' && call.path === '/api/v1/me') {
       if (!state.reauthed) return reauthRequired
       state.session = false

@@ -14,10 +14,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/App'
 import {
   type ApiCall,
+  hasHousehold,
   me,
   mockApi,
   networkError,
   noContent,
+  noHousehold,
   originRejected,
   type Reply,
   serverError,
@@ -70,6 +72,7 @@ function withdrawable() {
   let session = true
   return (call: ApiCall) => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return session ? me : unauthenticated
+    if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
     if (call.method === 'DELETE' && call.path === '/api/v1/me') {
       session = false
       return noContent
@@ -115,7 +118,9 @@ describe('탈퇴 확인 화면', () => {
     await screen.findByText(NO_HOUSEHOLD)
     expect(screen.queryByText(WITHDRAW_NOTICE)).toBeNull()
     await settle()
-    expect(api.calls.filter((call) => !(call.method === 'GET' && call.path === '/api/v1/me'))).toEqual([])
+    expect(
+      api.calls.filter((call) => !(call.method === 'GET' && ['/api/v1/me', '/api/v1/household'].includes(call.path))),
+    ).toEqual([])
   })
 
   it('US3-3: 확인 화면에서 탈퇴하면 DELETE /api/v1/me 한 번 뒤 로그인 화면이다', async () => {
@@ -141,6 +146,7 @@ function deleteReplies(...replies: Outcome[]) {
   let session = true
   return (call: ApiCall): Outcome | undefined => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return session ? me : unauthenticated
+    if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
     if (call.method === 'DELETE' && call.path === '/api/v1/me') {
       const reply = replies.shift() ?? noContent
       if (reply !== networkError && (reply.status === 204 || reply.status === 401)) session = false
@@ -247,6 +253,7 @@ const reauthRequired: Reply = {
 function keepSession(...replies: Outcome[]) {
   return (call: ApiCall): Outcome | undefined => {
     if (call.method === 'GET' && call.path === '/api/v1/me') return me
+    if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
     if (call.method === 'DELETE' && call.path === '/api/v1/me') return replies.shift() ?? noContent
     return undefined
   }
@@ -289,5 +296,130 @@ describe('탈퇴 요청 오류 안내', () => {
     fireEvent.click(screen.getByRole('button', { name: WITHDRAW }))
     await screen.findByText(RETRY_NOTICE)
     expect(screen.queryByText(REAUTH_NOTICE)).toBeNull()
+  })
+})
+
+const HAS_HOUSEHOLD_NOTICE = '가구를 나가거나 삭제한 뒤 탈퇴할 수 있습니다.'
+const TITLE = '함께 보는 사람'
+
+// code만 HAS_HOUSEHOLD가 아닌 409
+const otherConflict: Reply = {
+  status: 409,
+  body: {
+    type: 'https://example.com/problems/conflict',
+    title: '충돌했습니다',
+    status: 409,
+    detail: '계약 예시',
+    code: 'SOMETHING_ELSE',
+  },
+}
+
+const owner2: Reply = {
+  status: 200,
+  body: {
+    members: [
+      { userId: 1, displayName: '엄마', role: 'owner', loginEmail: 'user1@example.com', emailVerified: true, me: true },
+      { userId: 2, displayName: '아빠', role: 'member', loginEmail: 'user2@example.com', emailVerified: false, me: false },
+    ],
+  },
+}
+
+const asMember: Reply = {
+  status: 200,
+  body: {
+    members: [
+      { userId: 1, displayName: '민지', role: 'owner', loginEmail: 'owner@example.com', emailVerified: true, me: false },
+      { userId: 2, displayName: '엄마', role: 'member', loginEmail: 'user1@example.com', emailVerified: true, me: true },
+    ],
+  },
+}
+
+/** 가구가 있는 로그인 사람. DELETE /api/v1/me 응답을 차례로 정하고 비면 204다. */
+function withHousehold(household: Reply, ...replies: Outcome[]) {
+  return (call: ApiCall): Outcome | undefined => {
+    if (call.method === 'GET' && call.path === '/api/v1/me') return me
+    if (call.method === 'GET' && call.path === '/api/v1/household') return household
+    if (call.method === 'GET' && call.path === '/api/v1/household/invitations') return { status: 200, body: { invitations: [] } }
+    if (call.method === 'DELETE' && call.path === '/api/v1/me') return replies.shift() ?? noContent
+    return undefined
+  }
+}
+
+describe('가구가 있는 사람의 탈퇴 (US4-7)', () => {
+  it.each([
+    { label: 'owner', household: owner2 },
+    { label: 'member', household: asMember },
+  ])('US4-7: $label 의 임시 첫 화면에는 탈퇴 버튼이나 링크가 없다', async ({ household }) => {
+    api = mockApi(withHousehold(household))
+    openAt('/')
+    await screen.findByText(TITLE)
+    await settle()
+    expect(screen.queryByRole('button', { name: /탈퇴/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /탈퇴/ })).toBeNull()
+    expect(deleteCalls()).toEqual([])
+  })
+
+  it.each([
+    { label: 'owner', household: owner2 },
+    { label: 'member', household: asMember },
+  ])('US4-7: $label 가 /withdraw 를 열면 탈퇴 확인 화면이고 열기만 해서는 요청을 보내지 않는다', async ({ household }) => {
+    api = mockApi(withHousehold(household))
+    openAt('/withdraw')
+    await expectConfirmScreen()
+    await settle()
+    expect(screen.queryByText(TITLE)).toBeNull()
+    expect(deleteCalls()).toEqual([])
+  })
+
+  it.each([
+    { label: 'owner', household: owner2 },
+    { label: 'member', household: asMember },
+  ])('US4-7: $label 가 탈퇴해 409 HAS_HOUSEHOLD 를 받으면 안내가 보이고 확인 화면과 로그인 상태가 그대로다', async ({ household }) => {
+    api = mockApi(withHousehold(household, hasHousehold))
+    openAt('/withdraw')
+    await expectConfirmScreen()
+    fireEvent.click(screen.getByRole('button', { name: WITHDRAW }))
+    await screen.findByText(HAS_HOUSEHOLD_NOTICE)
+    await expectConfirmScreen()
+    expect(screen.queryByText(RETRY_NOTICE)).toBeNull()
+    expect(screen.queryByRole('link', { name: LOGIN })).toBeNull()
+    expect(window.location.pathname).toBe('/withdraw')
+    await settle()
+    expect(deleteCalls()).toHaveLength(1)
+  })
+
+  it.each([
+    { label: '다른 code 의 409', reply: otherConflict as Outcome },
+    { label: '500', reply: serverError },
+    { label: '네트워크 끊김', reply: networkError },
+  ])('$label 는 001대로 "잠시 후 다시 시도해 주세요."이고 가구 안내는 없다', async ({ reply }) => {
+    api = mockApi(withHousehold(owner2, reply))
+    openAt('/withdraw')
+    await expectConfirmScreen()
+    fireEvent.click(screen.getByRole('button', { name: WITHDRAW }))
+    await screen.findByText(RETRY_NOTICE)
+    expect(screen.queryByText(HAS_HOUSEHOLD_NOTICE)).toBeNull()
+    await expectConfirmScreen()
+    expect(deleteCalls()).toHaveLength(1)
+  })
+
+  const HAS = { reply: hasHousehold, notice: HAS_HOUSEHOLD_NOTICE }
+  const RETRY = { reply: serverError, notice: RETRY_NOTICE }
+  const REAUTH = { reply: reauthRequired, notice: REAUTH_NOTICE }
+  it.each([
+    { label: '409 HAS_HOUSEHOLD 뒤 500', first: HAS, second: RETRY },
+    { label: '500 뒤 409 HAS_HOUSEHOLD', first: RETRY, second: HAS },
+    { label: '재인증 뒤 409 HAS_HOUSEHOLD', first: REAUTH, second: HAS },
+    { label: '409 HAS_HOUSEHOLD 뒤 재인증', first: HAS, second: REAUTH },
+  ])('안내는 한 번에 하나만 보인다: $label 이면 마지막 응답의 안내만 남는다', async ({ first, second }) => {
+    api = mockApi(withHousehold(owner2, first.reply, second.reply))
+    openAt('/withdraw')
+    await expectConfirmScreen()
+    fireEvent.click(screen.getByRole('button', { name: WITHDRAW }))
+    await screen.findByText(first.notice)
+    fireEvent.click(screen.getByRole('button', { name: WITHDRAW }))
+    await screen.findByText(second.notice)
+    expect(screen.queryByText(first.notice)).toBeNull()
+    expect(deleteCalls()).toHaveLength(2)
   })
 })

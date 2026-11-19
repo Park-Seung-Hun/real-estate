@@ -13,7 +13,7 @@ export function LoginPage() {
       <a className="button" href={href}>
         Google 계정으로 로그인
       </a>
-      <p>가족에게 받은 초대 링크로 들어왔다면 로그인하면 바로 수락됩니다.</p>
+      <p>가족에게 받은 초대 링크로 들어왔다면 로그인한 뒤 들어갈 가구를 확인합니다.</p>
     </>
   )
 }

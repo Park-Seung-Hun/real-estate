@@ -21,6 +21,7 @@ import {
   mockApi,
   networkError,
   noContent,
+  noHousehold,
   originRejected,
   type Reply,
   serverError,
@@ -31,8 +32,11 @@ import {
 
 const SERVICE_NAME = '서초댁 임장 기록'
 const LOGIN = 'Google 계정으로 로그인'
-const INVITE_GUIDE = '가족에게 받은 초대 링크로 들어왔다면 로그인하면 바로 수락됩니다.'
+const INVITE_GUIDE = '가족에게 받은 초대 링크로 들어왔다면 로그인한 뒤 들어갈 가구를 확인합니다.'
 const NO_HOUSEHOLD = '아직 가구가 없습니다.'
+const CREATE_GUIDE = '가족과 함께 볼 기록을 모으려면 가구를 만드세요.'
+const INVITE_LINK_GUIDE = '가족에게 받은 초대 링크가 있으면 그 링크를 여세요.'
+const CREATE = '가구 만들기'
 const LOGOUT = '로그아웃'
 const WITHDRAW = '탈퇴'
 const LOGIN_FAILED = '로그인하지 못했습니다. 다시 시도해 주세요.'
@@ -64,7 +68,11 @@ afterEach(async () => {
 const loggedOut = (call: ApiCall) =>
   call.method === 'GET' && call.path === '/api/v1/me' ? unauthenticated : undefined
 
-const loggedIn = (call: ApiCall) => (call.method === 'GET' && call.path === '/api/v1/me' ? me : undefined)
+const loggedIn = (call: ApiCall) => {
+  if (call.method === 'GET' && call.path === '/api/v1/me') return me
+  if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
+  return undefined
+}
 
 function openAt(path: string) {
   window.history.replaceState(null, '', path)
@@ -181,6 +189,7 @@ describe('내 정보 조회가 401도 200도 아닌 오류일 때 (R13)', () => 
   it('다시 시도를 누르면 /me 를 다시 부르고, 200 이면 가구 없음 화면이다', async () => {
     let first = true
     api = mockApi((call) => {
+      if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
       if (call.method !== 'GET' || call.path !== '/api/v1/me') return undefined
       const reply = first ? serverError : me
       first = false
@@ -199,10 +208,13 @@ function meCalls() {
 }
 
 describe('가구 없음 화면', () => {
-  it.each(['/', '/no-household'])('%s 에서 안내와 로그아웃, 탈퇴 버튼이 보인다 (US1-8, FR-010)', async (path) => {
+  it.each(['/', '/no-household'])('%s 에서 안내 셋과 가구 만들기, 로그아웃, 탈퇴 버튼이 보인다 (US1-8, FR-010)', async (path) => {
     api = mockApi(loggedIn)
     openAt(path)
     await screen.findByText(NO_HOUSEHOLD)
+    screen.getByText(CREATE_GUIDE)
+    screen.getByText(INVITE_LINK_GUIDE)
+    screen.getByRole('button', { name: CREATE })
     screen.getByRole('button', { name: LOGOUT })
     getControl(WITHDRAW)
     expect(screen.queryByRole('link', { name: LOGIN })).toBeNull()
@@ -212,6 +224,7 @@ describe('가구 없음 화면', () => {
     let session = true
     api = mockApi((call) => {
       if (call.method === 'GET' && call.path === '/api/v1/me') return session ? me : unauthenticated
+      if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
       if (call.method === 'POST' && call.path === '/api/v1/logout') {
         session = false
         return noContent
@@ -231,6 +244,7 @@ describe('가구 없음 화면', () => {
     let session = true
     api = mockApi((call) => {
       if (call.method === 'GET' && call.path === '/api/v1/me') return session ? me : unauthenticated
+      if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
       if (call.method === 'POST' && call.path === '/api/v1/logout') {
         session = false
         return unauthenticated
@@ -249,6 +263,7 @@ describe('가구 없음 화면', () => {
   ])('로그아웃 요청이 $label 로 끝나면 가구 없음 화면과 로그아웃 버튼이 남는다 (R13)', async ({ reply }) => {
     api = mockApi((call) => {
       if (call.method === 'GET' && call.path === '/api/v1/me') return me
+      if (call.method === 'GET' && call.path === '/api/v1/household') return noHousehold
       if (call.method === 'POST' && call.path === '/api/v1/logout') return reply
       return undefined
     })

@@ -7,6 +7,8 @@ export type ApiCall = {
   search: string
   credentials: RequestCredentials | undefined
   sameOrigin: boolean
+  /** 문자열 본문만 기록한다. 화면은 JSON.stringify한 문자열만 보낸다. */
+  body: string | undefined
 }
 
 export type Reply = { status: number; body?: unknown }
@@ -26,6 +28,36 @@ export const unauthenticated: Reply = {
 export const me: Reply = {
   status: 200,
   body: { displayName: '엄마', loginEmail: 'user1@example.com', emailVerified: true },
+}
+
+export const members: Reply = {
+  status: 200,
+  body: {
+    members: [{ userId: 1, displayName: '엄마', role: 'owner', loginEmail: 'user1@example.com', emailVerified: true, me: true }],
+  },
+}
+
+// 계약(specs/002-household-sharing/contracts/openapi.yaml)의 NoHousehold, HasHousehold 예시
+export const noHousehold: Reply = {
+  status: 403,
+  body: {
+    type: 'https://example.com/problems/no-household',
+    title: '가구가 없습니다',
+    status: 403,
+    detail: '가구를 만들거나 초대 링크로 들어온 뒤 다시 시도해 주세요.',
+    code: 'NO_HOUSEHOLD',
+  },
+}
+
+export const hasHousehold: Reply = {
+  status: 409,
+  body: {
+    type: 'https://example.com/problems/has-household',
+    title: '이미 가구가 있습니다',
+    status: 409,
+    detail: '가구를 나가거나 삭제한 뒤 다시 시도해 주세요.',
+    code: 'HAS_HOUSEHOLD',
+  },
 }
 
 export const noContent: Reply = { status: 204 }
@@ -63,6 +95,7 @@ export function mockApi(handler: (call: ApiCall) => Reply | typeof networkError 
       search: url.search,
       credentials: init?.credentials ?? request?.credentials,
       sameOrigin: url.origin === window.location.origin,
+      body: typeof init?.body === 'string' ? init.body : undefined,
     }
     calls.push(call)
     const reply = handler(call)
@@ -113,4 +146,28 @@ export function watchNavigation() {
       virtualConsole.off('jsdomError', listener)
     },
   }
+}
+
+/**
+ * mockApi 위에 fetch를 한 겹 더 씌워, 이 함수를 부른 뒤 처음 오는 method path 요청의 응답을 붙잡아 두었다가 release()로 푼다.
+ * 요청은 mockApi에 그대로 기록되고, 응답은 요청을 받은 순간의 서버 상태로 정해진다.
+ * 브라우저처럼 그 요청의 signal이 풀기 전에 중단되었으면 AbortError로 거부한다. 반드시 mockApi 뒤에 부른다.
+ */
+export function holdNext(method: string, path: string) {
+  const mocked = globalThis.fetch
+  const hold = { held: false, release: () => {} }
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : undefined
+    const url = new URL(request ? request.url : String(input), window.location.href)
+    const requestMethod = (init?.method ?? request?.method ?? 'GET').toUpperCase()
+    if (hold.held || requestMethod !== method || url.pathname !== path) return mocked(input, init)
+    hold.held = true
+    const answer = await mocked(input, init)
+    await new Promise<void>((resolve) => {
+      hold.release = resolve
+    })
+    if ((init?.signal ?? request?.signal)?.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
+    return answer
+  })
+  return hold
 }
