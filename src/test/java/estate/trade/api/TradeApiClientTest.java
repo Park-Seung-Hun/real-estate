@@ -27,6 +27,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.boot.logging.LoggingSystem;
@@ -312,6 +314,19 @@ class TradeApiClientTest {
         assertThat(counter.calls()).isEqualTo(2);
     }
 
+    /** 요청과 다른 페이지를 받아들이면 같은 거래가 두 번 담기고 다른 거래가 빠져도 건수 확인을 통과할 수 있다. */
+    @ParameterizedTest(name = "요청 {0}, 응답 {1}")
+    @CsvSource({"2, 1", "1, 2"})
+    void failsAsParseErrorWhenResponsePageDiffersFromRequest(int requested, int answered) {
+        server.enqueue(LAWD_CD, DEAL_YMD, requested, Reply.body(response(1500, answered, 1000, item())));
+
+        TradeApiException e = failure(() -> client().fetchPage(LAWD_CD, DEAL_YMD, requested, counter()));
+
+        assertThat(e.kind()).isEqualTo(Kind.PARSE_ERROR);
+        assertThat(e.isRunStopping()).isFalse();
+        assertThat(server.requestCount()).isEqualTo(1);
+    }
+
     @Test
     void failsOnlyTheRangeWhenSecondPageHasResultCodeError() {
         server.enqueue(LAWD_CD, DEAL_YMD, 1, Reply.body(response(1500, 1, 1000, item())));
@@ -341,7 +356,7 @@ class TradeApiClientTest {
     @Test
     void countsEveryRequestIncludingRetries() {
         server.enqueue(LAWD_CD, DEAL_YMD, 1, Reply.status(500), Reply.status(500), Reply.body(response(item())));
-        server.enqueue(LAWD_CD, DEAL_YMD, 2, Reply.body(response(item())));
+        server.enqueue(LAWD_CD, DEAL_YMD, 2, Reply.body(response(1001, 2, 1000, item())));
         TradeApiClient client = client();
         CallCounter counter = counter();
 

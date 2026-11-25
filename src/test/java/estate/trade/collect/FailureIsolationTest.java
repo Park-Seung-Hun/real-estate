@@ -340,6 +340,35 @@ class FailureIsolationTest {
         assertNextRangesContinued("202607");
     }
 
+    @Test
+    @DisplayName("FR-008: 2페이지 요청에 1페이지가 다시 오면 건수가 맞아도 그 범위만 해석 실패, 원본 없음, 거래와 이력 그대로")
+    void repeatedPageFailsRangeEvenWhenCountsMatch() {
+        loadYesterday();
+        List<String> julyBefore = monthState("202607");
+        assertThat(julyBefore).as("전제: 202607에 어제 거래 C가 있음").anyMatch(l -> l.contains(" trade "));
+        todayExcept("202607");
+        // 전체 2000건, 두 응답 모두 같은 1000건이라 건수 확인은 통과한다. 비교했다면 C 사라짐과 신규가 남는다
+        Item[] firstPage = IntStream.rangeClosed(1, 1000)
+                .mapToObj(i -> item(X, "202607", "99999-1").with("dealAmount", String.valueOf(10000 + i)))
+                .toArray(Item[]::new);
+        byte[] page1 = response(2000, 1, 1000, firstPage);
+        server.enqueue(X, "202607", 1, Reply.body(page1));
+        server.enqueue(X, "202607", 2, Reply.body(page1));
+
+        run(X);
+
+        assertThat(server.requestCount(X, "202607", 2)).as("전제: 두 번째 페이지를 요청함").isEqualTo(1);
+        RangeRow july = range(X, "202607");
+        assertThat(july.status()).isEqualTo("실패");
+        assertThat(july.fetchedAt()).isEqualTo(DAY0);
+        assertThat(july.reason()).startsWith("PARSE_ERROR: ");
+        assertThat(monthState("202607")).isEqualTo(julyBefore);
+        // 어제 적재의 원본은 남아 있으므로 오늘 실행의 키만 본다
+        assertThat(raw.savedKeys()).doesNotContain(RawObjectKey.of(DAY1, X, "202607", 1),
+                RawObjectKey.of(DAY1, X, "202607", 2));
+        assertNextRangesContinued("202607");
+    }
+
     // ---- US3-7, SC-005 ----
 
     @ParameterizedTest(name = "succeeds={0}")

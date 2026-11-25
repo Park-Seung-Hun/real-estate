@@ -85,7 +85,12 @@ public class TradeApiClient {
             throw TradeApiException.networkError(e.getClass().getSimpleName());
         }
         try {
-            return new PageResult(body, TradeResponseParser.parse(body, lawdCd, dealYmd));
+            TradePage page = TradeResponseParser.parse(body, lawdCd, dealYmd);
+            // 다른 페이지를 받으면 거래가 겹치고 빠진 채 건수 확인을 통과해 거짓 신규와 사라짐이 남을 수 있다
+            if (page.pageNo() != pageNo) {
+                throw TradeApiException.parseError("응답의 페이지 번호가 요청과 다름");
+            }
+            return new PageResult(body, page);
         } catch (TradeApiException e) {
             if (e.kind() == TradeApiException.Kind.RESULT_CODE) {
                 throw TradeApiException.resultCode(e.code(), maskServiceKey(e.fullResultMessage()));

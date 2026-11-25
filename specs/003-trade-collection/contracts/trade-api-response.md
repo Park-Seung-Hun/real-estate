@@ -34,6 +34,7 @@ HTTP 200, `Content-Type`은 확인하지 않았고 본문은 UTF-8 XML입니다.
 - 정상 결과 코드는 `000`입니다.
 - 거래가 없는 달은 `<items/>`와 `totalCount` 0인 정상 응답입니다.
 - 마지막 페이지는 `ceil(totalCount / numOfRows)`입니다. 수집한 건수는 모든 페이지의 `item` 수 합이고 `totalCount`와 비교합니다. 페이지마다 `totalCount`가 다르면 건수 확인 실패입니다(spec FR-011).
+- 응답의 `pageNo`가 요청한 값과 다르면 그 범위를 `PARSE_ERROR`로 기록합니다.
 - 행 순서는 정해져 있지 않고 날마다 바뀔 수 있습니다. 순서나 위치로 거래를 구분하지 않습니다.
 
 ## 항목
@@ -56,7 +57,7 @@ HTTP 200, `Content-Type`은 확인하지 않았고 본문은 UTF-8 XML입니다.
 | `rgstDate` | `26.10.03`(`YY.MM.DD`) 또는 빈 값 | 등기일(20YY로 읽음) |
 | `aptDong` | `101`, `101동`, 빈 값 등 형식이 정해져 있지 않음 | 동(앞뒤 공백을 뺀 문자열 그대로) |
 
-필수 항목(`aptSeq`, `aptNm`, `sggCd`, `umdNm`, 계약일 셋, `floor`, `excluUseAr`, `dealAmount`)이 비었거나 형식이 맞지 않거나, `sggCd`가 요청한 `LAWD_CD`와 다르거나 계약년월이 `DEAL_YMD`와 다르면 그 범위를 실패(`RESULT_CODE`가 아니라 `PARSE_ERROR`)로 기록하고 비교하지 않습니다([research R7](../research.md#r7-범위-결과-기록과-트랜잭션)).
+필수 항목(`aptSeq`, `aptNm`, `sggCd`, `umdNm`, 계약일 셋, `floor`, `excluUseAr`, `dealAmount`)이 비었거나 형식이 맞지 않거나, `sggCd`가 요청한 `LAWD_CD`와 다르거나 계약년월이 `DEAL_YMD`와 다르거나 응답의 `pageNo`가 요청과 다르면 그 범위를 실패(`RESULT_CODE`가 아니라 `PARSE_ERROR`)로 기록하고 비교하지 않습니다([research R7](../research.md#r7-범위-결과-기록과-트랜잭션)).
 
 ## 오류 응답
 
