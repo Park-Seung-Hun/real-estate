@@ -161,7 +161,7 @@
 - [X] T047 전체 테스트를 통과시킨다: `./gradlew test --rerun`. 결과 집계는 `build/test-results/test/*.xml`로 센다
 - [X] T048 커밋 전 점검: `git add` 뒤 `python3 -I <원래 체크아웃>/.private/tools/precommit_check.py <저장소>`, 그리고 저장소 소유자의 `.env`에 있는 실제 지역 코드와 인증키 값이 스테이징된 파일과 커밋 메시지에 없는지 `git grep`으로 확인한다(값은 출력하지 않는다). 43자 이상의 긴 테스트 메서드 이름이 키로 오인되면 이름을 줄이거나 근거를 적는다
 - [ ] T049 quickstart "3. 실제 API로 한 번 실행"을 저장소 소유자와 함께 한다(실제 인증키, 본인의 관심 지역 코드, 하루 호출 한도 확인). 결과(실행 종류, 범위 수, 호출 수, 원본 파일 수, 인증키가 로그에 없음)를 진행 원장에 적는다. 다음 날 매일 수집 결과도 확인한다
-- [ ] T050 기능 브랜치 전체를 spec, plan, tasks, `docs/review-criteria.md`와 대조하는 최종 리뷰를 한다
+- [X] T050 기능 브랜치 전체를 spec, plan, tasks, `docs/review-criteria.md`와 대조하는 최종 리뷰를 한다
 - [ ] T051 `docs/backlog.md`의 003 상태를 완료로 바꾼다(`develop/v1` 머지 직전 커밋, 저장소 소유자 허락 필요)
 
 ---
