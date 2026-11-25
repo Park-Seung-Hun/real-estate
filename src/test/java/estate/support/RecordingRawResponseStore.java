@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /** 저장한 키와 바이트와 저장 순번을 기록하고, 특정 키나 n번째 저장에서 실패를 주입하는 가짜 원본 저장소. */
@@ -18,6 +19,8 @@ public class RecordingRawResponseStore implements RawResponseStore {
     private Predicate<String> failOnKey = key -> false;
     private int failOnNth = -1;
     private int attempts;
+    private Consumer<String> onSave = key -> {
+    };
 
     public RecordingRawResponseStore() {
         this(new AtomicLong());
@@ -39,9 +42,16 @@ public class RecordingRawResponseStore implements RawResponseStore {
         return this;
     }
 
+    /** 저장을 시도하는 순간(기록하기 전, 실패를 주입하기 전) 키를 받아 실행한다. 순서 확인용. */
+    public synchronized RecordingRawResponseStore onSave(Consumer<String> callback) {
+        this.onSave = callback;
+        return this;
+    }
+
     @Override
     public synchronized void save(String key, byte[] responseBody) throws IOException {
         attempts++;
+        onSave.accept(key);
         if (attempts == failOnNth || failOnKey.test(key)) {
             throw new IOException("injected failure");
         }
@@ -61,5 +71,7 @@ public class RecordingRawResponseStore implements RawResponseStore {
         attempts = 0;
         failOnKey = key -> false;
         failOnNth = -1;
+        onSave = key -> {
+        };
     }
 }

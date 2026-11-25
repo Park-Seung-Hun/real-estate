@@ -24,7 +24,8 @@ import org.springframework.web.util.UriUtils;
  */
 public class TradeApiClient {
 
-    private static final int NUM_OF_ROWS = 1000;
+    /** 한 번에 요청하는 건수. 마지막 페이지 번호를 계산하는 쪽도 이 값을 쓴다. */
+    public static final int NUM_OF_ROWS = 1000;
 
     /** 원본 응답 바이트(그대로 보관할 대상)와 해석한 페이지. */
     public record PageResult(byte[] rawBody, TradePage page) {

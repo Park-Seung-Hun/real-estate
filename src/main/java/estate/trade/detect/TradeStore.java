@@ -49,6 +49,11 @@ public class TradeStore {
         return rows;
     }
 
+    /** 직전에 거래가 있던 범위인가: 건수가 1 이상인 거래 행이 있다(FR-011). */
+    public boolean hasTrades(String lawdCd, String dealYmd) {
+        return readRange(lawdCd, dealYmd).values().stream().anyMatch(row -> row.count() >= 1);
+    }
+
     public long insertTrade(long complexId, TradeKey key, int count, Values values, Instant firstSeenAt) {
         return jdbc.sql("""
                 insert into trade (id, complex_id, deal_date, floor, exclusive_area, amount, canceled, same_key_count,

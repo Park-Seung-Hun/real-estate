@@ -82,19 +82,45 @@ public class FetchRangeStore {
         }
     }
 
-    /** 실행이 멈출 때 시도하지 않은 범위 가운데 행이 있는 범위만 실패로 기록한다. 행이 없는 범위는 만들지 않는다(FR-019). */
+    /**
+     * 이미 행이 있는 범위만 실패로 기록하고, 기록한 계약년월을 돌려준다. 실행이 멈출 때 쓴다. 행이 없는 범위(새로 들어온 달)를
+     * 만들면 다음 날 앞서 실패만 한 범위가 되어 그 달의 신규가 빠진다(FR-008).
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markRunStopped(String lawdCd, Collection<String> dealYmds, String stopReasonCode) {
+    public List<String> markFailureIfRecorded(String lawdCd, Collection<String> dealYmds, String reason) {
         if (dealYmds.isEmpty()) {
-            return;
+            return List.of();
         }
-        jdbc.sql("""
+        return jdbc.sql("""
                 update fetch_range set status = '실패', failure_reason = :reason
-                where lawd_cd = :lawdCd and deal_ymd in (:dealYmds)""")
+                where lawd_cd = :lawdCd and deal_ymd in (:dealYmds)
+                returning deal_ymd""")
                 .param("lawdCd", lawdCd)
                 .param("dealYmds", dealYmds)
-                .param("reason", "RUN_STOPPED: " + stopReasonCode)
-                .update();
+                .param("reason", reason)
+                .query(String.class)
+                .list();
+    }
+
+    /** 대상 지역들의 실패한 범위. 지역, 계약년월 순서. */
+    public List<Range> readFailedRanges(Collection<String> lawdCds) {
+        if (lawdCds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                select lawd_cd, deal_ymd from fetch_range where status = '실패' and lawd_cd in (:cds)
+                order by lawd_cd, deal_ymd""")
+                .param("cds", lawdCds)
+                .query((rs, n) -> new Range(rs.getString("lawd_cd"), rs.getString("deal_ymd")))
+                .list();
+    }
+
+    /** 다른 지역의 행이 있는가. 초기 적재와 범위 확장의 이름을 가른다(research R3). */
+    public boolean hasOtherRegionRows(String lawdCd) {
+        return jdbc.sql("select exists (select 1 from fetch_range where lawd_cd <> :lawdCd)")
+                .param("lawdCd", lawdCd)
+                .query(Boolean.class)
+                .single();
     }
 
     private static Instant toInstant(Timestamp timestamp) {

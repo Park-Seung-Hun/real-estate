@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 가짜 실거래 API 서버(JDK HttpServer, 빈 포트로 시작). 사용법:
@@ -33,7 +34,9 @@ import java.util.function.Consumer;
  *
  * <ul>
  * <li>{@link #enqueue}는 (LAWD_CD, DEAL_YMD, pageNo)마다 응답을 순서대로 지정한다. 지정한 응답을 다 쓰면 마지막 응답을
- * 계속 돌려준다(세 번 모두 실패하는 경우를 한 줄로 쓰기 위해). 지정하지 않은 조합은 HTTP 404.</li>
+ * 계속 돌려준다(세 번 모두 실패하는 경우를 한 줄로 쓰기 위해). 지정하지 않은 조합은 {@link #fallback}의 응답이고 기본은
+ * HTTP 404.</li>
+ * <li>{@link #reset}은 지정한 응답, 받은 요청, 콜백, 기본 응답을 처음 상태로 되돌린다.</li>
  * <li>{@link #onRequest}는 요청을 받는 순간(응답하기 전) 실행할 콜백이다. 콜백이 던진 예외는 무시한다.</li>
  * </ul>
  */
@@ -84,6 +87,7 @@ public final class FakeTradeApiServer implements AutoCloseable {
     private final List<Request> requests = new ArrayList<>();
     private Consumer<Request> onRequest = request -> {
     };
+    private Function<Request, Reply> fallback = request -> Reply.status(404);
 
     private FakeTradeApiServer(HttpServer server) {
         this.server = server;
@@ -110,6 +114,20 @@ public final class FakeTradeApiServer implements AutoCloseable {
 
     public synchronized void onRequest(Consumer<Request> callback) {
         this.onRequest = callback;
+    }
+
+    /** 지정하지 않은 조합의 응답. */
+    public synchronized void fallback(Function<Request, Reply> reply) {
+        this.fallback = reply;
+    }
+
+    public synchronized void reset() {
+        replies.clear();
+        lastReplies.clear();
+        requests.clear();
+        onRequest = request -> {
+        };
+        fallback = request -> Reply.status(404);
     }
 
     /** 받은 요청의 복사본(받은 순서). */
@@ -155,7 +173,8 @@ public final class FakeTradeApiServer implements AutoCloseable {
                 if (queue != null && !queue.isEmpty()) {
                     lastReplies.put(key, queue.poll());
                 }
-                reply = lastReplies.getOrDefault(key, Reply.status(404));
+                Reply assigned = lastReplies.get(key);
+                reply = assigned != null ? assigned : fallback.apply(request);
             }
             try {
                 callback.accept(request);

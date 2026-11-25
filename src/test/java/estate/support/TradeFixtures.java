@@ -96,6 +96,12 @@ public final class TradeFixtures {
         return new Item(aptSeq);
     }
 
+    /** 이 지역, 이 계약년월(YYYYMM) 15일의 항목. 수집 테스트는 항목의 시군구 코드와 계약년월이 요청과 같아야 한다. */
+    public static Item item(String lawdCd, String dealYmd, String aptSeq) {
+        return new Item(aptSeq).with("sggCd", lawdCd).with("dealYear", dealYmd.substring(0, 4))
+                .with("dealMonth", String.valueOf(Integer.parseInt(dealYmd.substring(4))));
+    }
+
     /** 기본 항목 하나("99999-1"). */
     public static Item item() {
         return item("99999-1");
