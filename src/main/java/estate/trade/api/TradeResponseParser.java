@@ -98,6 +98,10 @@ public final class TradeResponseParser {
                         hasChild.push(false);
                         text.setLength(0);
                         if ("item".equals(name)) {
+                            // 중첩되면 바깥 item이 끝날 때 목록에 null이 들어가 해석 실패가 아닌 예외로 샌다
+                            if (currentItem != null) {
+                                throw TradeApiException.parseError("item이 중첩됨");
+                            }
                             currentItem = new HashMap<>();
                         }
                     }

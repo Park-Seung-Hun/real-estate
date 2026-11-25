@@ -219,6 +219,15 @@ class TradeResponseParserTest {
         assertThat(failure(response(item().with(element, value))).kind()).isEqualTo(Kind.PARSE_ERROR);
     }
 
+    /** 해석 중의 다른 예외로 새면 그 범위만 실패하지 않고 실행 전체가 끝난다(FR-008). */
+    @Test
+    void failsAsParseErrorWhenItemsAreNested() {
+        // 안쪽 item은 값이 온전해야 필수 항목 검사를 지나 바깥 item이 끝나는 자리까지 간다
+        String xml = new String(response(item()), StandardCharsets.UTF_8)
+                .replace("<item>", "<item><item>").replace("</item>", "</item></item>");
+        assertThat(failure(TradeFixtures.bytes(xml)).kind()).isEqualTo(Kind.PARSE_ERROR);
+    }
+
     @Test
     void failsWhenSggCdDiffersFromRequestedLawdCd() {
         TradeApiException e = failure(response(item("99999-1"), item("99998-1").with("sggCd", "99998")));

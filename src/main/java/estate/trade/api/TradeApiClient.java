@@ -5,7 +5,9 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.springframework.core.retry.RetryPolicy;
 import org.springframework.core.retry.RetryTemplate;
 import org.springframework.http.HttpStatusCode;
@@ -31,10 +33,20 @@ public class TradeApiClient {
     public record PageResult(byte[] rawBody, TradePage page) {
     }
 
-    /** 200이 아닌데 Spring이 오류로 보지 않은 상태(3xx 등)를 재시도 대상 HTTP 오류로 바꾸는 예외. */
-    private static final class UnexpectedStatusException extends HttpStatusCodeException {
-        UnexpectedStatusException(HttpStatusCode status) {
+    /** 200이 아닌 상태를 상태 코드만 담은 재시도 대상 HTTP 오류로 바꾸는 예외. 응답 본문과 헤더는 담지 않는다. */
+    private static final class StatusOnlyException extends HttpStatusCodeException {
+        StatusOnlyException(HttpStatusCode status) {
             super(status);
+        }
+    }
+
+    /** 네트워크 오류를 원인 예외의 클래스 이름만 담은 재시도 대상 예외로 바꾼다. 원인 객체는 담지 않는다. */
+    private static final class CauseNameOnlyException extends ResourceAccessException {
+        private final String causeName;
+
+        CauseNameOnlyException(String causeName) {
+            super("네트워크 오류: " + causeName);
+            this.causeName = causeName;
         }
     }
 
@@ -65,11 +77,10 @@ public class TradeApiClient {
             body = retryTemplate.invoke(() -> request(uri, counter));
         } catch (TradeApiException e) {
             throw e;
-        } catch (RestClientResponseException e) {
+        } catch (StatusOnlyException e) {
             throw TradeApiException.httpError(e.getStatusCode().value());
-        } catch (ResourceAccessException e) {
-            throw TradeApiException.networkError(
-                    (e.getCause() != null ? e.getCause() : e).getClass().getSimpleName());
+        } catch (CauseNameOnlyException e) {
+            throw TradeApiException.networkError(e.causeName);
         } catch (RuntimeException e) {
             throw TradeApiException.networkError(e.getClass().getSimpleName());
         }
@@ -102,20 +113,36 @@ public class TradeApiClient {
 
     private byte[] request(URI uri, CallCounter counter) {
         counter.beforeRequest();
-        ResponseEntity<byte[]> response = restClient.get().uri(uri).retrieve().toEntity(byte[].class);
+        ResponseEntity<byte[]> response;
+        // RetryTemplate은 받은 예외를 원인까지 DEBUG 로그에 남긴다. 예외 메시지에는 응답 본문이나 서버가 보낸 글자가
+        // 담길 수 있어, RuntimeException은 어느 것도 그대로 밖으로 내보내지 않는다
+        try {
+            response = restClient.get().uri(uri).retrieve().toEntity(byte[].class);
+        } catch (RestClientResponseException e) {
+            throw new StatusOnlyException(e.getStatusCode());
+        } catch (ResourceAccessException e) {
+            throw new CauseNameOnlyException((e.getCause() != null ? e.getCause() : e).getClass().getSimpleName());
+        } catch (RuntimeException e) {
+            throw TradeApiException.networkError(e.getClass().getSimpleName());
+        }
         if (response.getStatusCode().value() != 200) {
-            throw new UnexpectedStatusException(response.getStatusCode());
+            throw new StatusOnlyException(response.getStatusCode());
         }
         return response.getBody() == null ? new byte[0] : response.getBody();
     }
 
-    /** 결과 메시지에 인증키(원문, 폼 인코딩, 엄격 인코딩)가 들어 있으면 가린다. */
+    /** 결과 메시지에 인증키(원문, 폼 인코딩, 엄격 인코딩, 이중 인코딩)가 들어 있으면 가린다. 16진수 대소문자는 서버마다 다르다. */
     private String maskServiceKey(String message) {
         if (message == null || serviceKey.isEmpty()) {
             return message;
         }
-        return message.replace(serviceKey, "***")
-                .replace(URLEncoder.encode(serviceKey, StandardCharsets.UTF_8), "***")
-                .replace(UriUtils.encode(serviceKey, StandardCharsets.UTF_8), "***");
+        String masked = message;
+        String formEncoded = URLEncoder.encode(serviceKey, StandardCharsets.UTF_8);
+        String strictEncoded = UriUtils.encode(serviceKey, StandardCharsets.UTF_8);
+        for (String form : List.of(serviceKey, formEncoded, strictEncoded,
+                URLEncoder.encode(formEncoded, StandardCharsets.UTF_8))) {
+            masked = Pattern.compile(Pattern.quote(form), Pattern.CASE_INSENSITIVE).matcher(masked).replaceAll("***");
+        }
+        return masked;
     }
 }

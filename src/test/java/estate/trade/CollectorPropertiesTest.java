@@ -8,6 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -52,6 +53,32 @@ class CollectorPropertiesTest {
     void bindsCommaSeparatedRegionsIntoList() {
         withDefaults(withRegions("99999,99998")).run(context ->
                 assertThat(context.getBean(CollectorProperties.class).regions()).containsExactly("99999", "99998"));
+    }
+
+    /** application.yml이 환경 변수 이름을 설정에 잇는지 본다. 값은 환경 변수 이름으로만 준다. */
+    @Test
+    void applicationYmlMapsEnvironmentVariables() {
+        runner.withInitializer(new ConfigDataApplicationContextInitializer())
+                .withPropertyValues(
+                        "ESTATE_COLLECTOR_REGIONS=99999,99998",
+                        "DATA_GO_KR_SERVICE_KEY=" + SERVICE_KEY,
+                        "ESTATE_COLLECTOR_CRON=0 30 7 * * *",
+                        "ESTATE_RAW_S3_ENDPOINT=http://localhost:3999",
+                        "ESTATE_RAW_S3_REGION=fake-region",
+                        "ESTATE_RAW_S3_BUCKET=raw-fake",
+                        "ESTATE_RAW_S3_ACCESS_KEY=fake-access",
+                        "ESTATE_RAW_S3_SECRET_KEY=" + SECRET)
+                .run(context -> {
+                    CollectorProperties properties = context.getBean(CollectorProperties.class);
+                    assertThat(properties.regions()).containsExactly("99999", "99998");
+                    assertThat(properties.serviceKey()).isEqualTo(SERVICE_KEY);
+                    assertThat(properties.cron()).isEqualTo("0 30 7 * * *");
+                    assertThat(properties.raw()).extracting(CollectorProperties.Raw::endpoint,
+                                    CollectorProperties.Raw::region, CollectorProperties.Raw::bucket,
+                                    CollectorProperties.Raw::accessKey, CollectorProperties.Raw::secretKey)
+                            .containsExactly("http://localhost:3999", "fake-region", "raw-fake", "fake-access",
+                                    SECRET);
+                });
     }
 
     @Test

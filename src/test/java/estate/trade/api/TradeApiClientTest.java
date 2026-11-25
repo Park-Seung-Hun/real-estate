@@ -15,6 +15,9 @@ import estate.trade.CollectorProperties;
 import estate.trade.api.TradeApiClient.PageResult;
 import estate.trade.api.TradeApiException.Kind;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -23,7 +26,12 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.logging.LogLevel;
+import org.springframework.boot.logging.LoggingSystem;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.core.retry.RetryPolicy;
 import org.springframework.http.HttpStatus;
@@ -179,6 +187,40 @@ class TradeApiClientTest {
 
         assertThat(e.kind()).isEqualTo(Kind.NETWORK_ERROR);
         assertNoSecretInside(e);
+    }
+
+    /** 깨진 상태 줄은 JDK의 예외 메시지에 담길 수 있고, 재시도 로거는 DEBUG에서 받은 예외를 원인까지 남긴다. */
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void retryDebugLogDoesNotCarryServerTextFromNetworkErrors(CapturedOutput output) throws Exception {
+        String marker = "reflected-marker-" + SERVICE_KEY;
+        LoggingSystem logging = LoggingSystem.get(getClass().getClassLoader());
+        logging.setLogLevel("org.springframework.core.retry", LogLevel.DEBUG);
+        try (ServerSocket socket = new ServerSocket(0, 10, InetAddress.getLoopbackAddress())) {
+            Thread.ofVirtual().start(() -> {
+                while (!socket.isClosed()) {
+                    try (Socket accepted = socket.accept()) {
+                        accepted.getInputStream().read(new byte[4096]);
+                        accepted.getOutputStream()
+                                .write(("HTTP/1.1 " + marker + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    } catch (IOException ignored) {
+                        // 서버를 닫으면 accept가 끝난다
+                    }
+                }
+            });
+            TradeApiClient client = new TradeApiClient(
+                    properties("http://127.0.0.1:" + socket.getLocalPort() + "/trade", Duration.ofSeconds(5)),
+                    noWaitPolicy());
+
+            TradeApiException e = failure(() -> client.fetchPage(LAWD_CD, DEAL_YMD, 1, counter()));
+
+            assertThat(e.kind()).isEqualTo(Kind.NETWORK_ERROR);
+            assertNoSecretInside(e);
+            assertThat(output.getAll()).as("전제: 재시도 DEBUG 로그가 남음").contains("Retry attempt for operation");
+            assertThat(output.getAll()).doesNotContain("reflected-marker");
+        } finally {
+            logging.setLogLevel("org.springframework.core.retry", null);
+        }
     }
 
     @Test

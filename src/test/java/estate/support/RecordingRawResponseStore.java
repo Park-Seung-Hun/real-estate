@@ -18,6 +18,7 @@ public class RecordingRawResponseStore implements RawResponseStore {
     private final List<Saved> saved = new ArrayList<>();
     private Predicate<String> failOnKey = key -> false;
     private int failOnNth = -1;
+    private RuntimeException runtimeFailure;
     private int attempts;
     private Consumer<String> onSave = key -> {
     };
@@ -48,11 +49,20 @@ public class RecordingRawResponseStore implements RawResponseStore {
         return this;
     }
 
+    /** {@link #failOnKey}에 걸린 저장이 IOException 대신 이 예외를 던진다. */
+    public synchronized RecordingRawResponseStore failWith(RuntimeException failure) {
+        this.runtimeFailure = failure;
+        return this;
+    }
+
     @Override
     public synchronized void save(String key, byte[] responseBody) throws IOException {
         attempts++;
         onSave.accept(key);
         if (attempts == failOnNth || failOnKey.test(key)) {
+            if (runtimeFailure != null) {
+                throw runtimeFailure;
+            }
             throw new IOException("injected failure");
         }
         saved.add(new Saved(key, responseBody.clone(), sequence.incrementAndGet()));
@@ -71,6 +81,7 @@ public class RecordingRawResponseStore implements RawResponseStore {
         attempts = 0;
         failOnKey = key -> false;
         failOnNth = -1;
+        runtimeFailure = null;
         onSave = key -> {
         };
     }

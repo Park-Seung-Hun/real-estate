@@ -17,8 +17,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +28,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.logging.LogLevel;
+import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -52,8 +56,14 @@ class ServiceKeyLeakTest {
     static final String X = LAWD_CD;
     static final String KEY = CollectorTestConfiguration.SERVICE_KEY;
     static final String ENCODED = URLEncoder.encode(KEY, StandardCharsets.UTF_8);
+    static final String DOUBLE_ENCODED = URLEncoder.encode(ENCODED, StandardCharsets.UTF_8);
+    /** 퍼센트 인코딩의 16진수를 소문자로 돌려주는 서버를 흉내 낸다. */
+    static final String LOWER_HEX = Pattern.compile("%[0-9A-F]{2}").matcher(ENCODED)
+            .replaceAll(m -> m.group().toLowerCase(Locale.ROOT));
+    /** 재시도 로거는 DEBUG에서 받은 예외를 남긴다. 운영자가 로그 수준을 낮춰도 키가 새지 않아야 한다. */
+    static final String RETRY_LOGGER = "org.springframework.core.retry";
     /** 키 자체, 인코딩한 키, 그리고 어느 인코딩이든 남는 앞부분. */
-    static final List<String> FORBIDDEN = List.of(KEY, ENCODED, URLEncoder.encode(ENCODED, StandardCharsets.UTF_8),
+    static final List<String> FORBIDDEN = List.of(KEY, ENCODED, DOUBLE_ENCODED,
             KEY.substring(0, KEY.indexOf('+')));
     /** 한국 2026-10-05 09:00. 초기 적재 202111~202610. */
     static final Instant DAY0 = Instant.parse("2026-10-05T00:00:00Z");
@@ -64,7 +74,7 @@ class ServiceKeyLeakTest {
                     Duration.ZERO),
             "202607", Reply.disconnect(),
             "202608", Reply.body(response()).after(Duration.ofSeconds(2)),
-            "202609", Reply.body(resultError("99", "SERVICE ERROR serviceKey=" + KEY + " " + ENCODED)));
+            "202609", Reply.body(resultError("99", "SERVICE ERROR " + KEY + " " + ENCODED + " " + LOWER_HEX + " " + DOUBLE_ENCODED)));
 
     @Autowired
     CollectionRun collectionRun;
@@ -86,11 +96,17 @@ class ServiceKeyLeakTest {
         jdbc = fixture.jdbc();
         fixture.reset();
         clock.freezeAt(DAY0);
+        logging().setLogLevel(RETRY_LOGGER, LogLevel.DEBUG);
     }
 
     @AfterEach
     void tearDown() {
+        logging().setLogLevel(RETRY_LOGGER, null);
         fixture.reset();
+    }
+
+    private static LoggingSystem logging() {
+        return LoggingSystem.get(ServiceKeyLeakTest.class.getClassLoader());
     }
 
     @Test
@@ -110,6 +126,8 @@ class ServiceKeyLeakTest {
         assertThat(reasons.get("202608")).startsWith("NETWORK_ERROR");
         assertThat(reasons.get("202609")).startsWith("RESULT_CODE: 99");
         assertThat(log).as("전제: 실패 범위 로그가 남음").contains("계약년월=202606", "계약년월=202609");
+        assertThat(log).as("전제: 본문에 키가 든 500의 재시도 DEBUG 로그가 남음")
+                .containsPattern("Retry attempt for operation .*500 INTERNAL_SERVER_ERROR");
         assertNoKey("로그", log);
         reasons.forEach((ymd, reason) -> assertNoKey("failure_reason " + ymd, String.valueOf(reason)));
         assertThat(raw.saved()).as("전제: 성공한 범위의 원본이 저장됨").hasSize(56);

@@ -70,11 +70,11 @@ class RangeCollector {
         // 건수 확인보다 먼저 저장한다. 건수가 다른 범위도 원본이 남아 원인을 조사할 수 있다(FR-010, FR-011)
         try {
             saveRaw(range, snapshot.runStartedAt(), pages);
-        } catch (IOException e) {
-            // 저장소 어댑터의 메시지는 SDK 예외 종류와 HTTP 상태뿐이라 남겨도 된다. 실패 사유만으로는 원인을 알 수 없다
-            log.warn("원본 응답 저장 실패: 지역={}, 계약년월={}, 원인={}", range.lawdCd(), range.dealYmd(), e.getMessage());
-            return failed(range, "RAW_SAVE_FAILED: " + e.getClass().getSimpleName());
-        } catch (RuntimeException e) {
+        } catch (IOException | RuntimeException e) {
+            // 저장소 어댑터의 IOException 메시지는 SDK 예외 종류와 HTTP 상태뿐이라 남겨도 된다. 실패 사유만으로는 원인을 알 수 없다
+            if (e instanceof IOException) {
+                log.warn("원본 응답 저장 실패: 지역={}, 계약년월={}, 원인={}", range.lawdCd(), range.dealYmd(), e.getMessage());
+            }
             return failed(range, "RAW_SAVE_FAILED: " + e.getClass().getSimpleName());
         }
 

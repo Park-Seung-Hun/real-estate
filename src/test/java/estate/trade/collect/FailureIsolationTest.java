@@ -320,6 +320,26 @@ class FailureIsolationTest {
         assertNextRangesContinued("202607");
     }
 
+    @Test
+    @DisplayName("US3-5, FR-008: 저장소가 IOException이 아닌 예외를 던져도 그 범위만 실패하고 메시지는 남기지 않음")
+    void unexpectedRawSaveErrorFailsOnlyThatRange(CapturedOutput output) {
+        loadYesterday();
+        List<String> julyBefore = monthState("202607");
+        todayExcept("202607");
+        server.enqueue(X, "202607", 1, Reply.body(response(item(X, "202607", "99999-1"))));
+        raw.failOnKey(RawObjectKey.of(DAY1, X, "202607", 1)::equals)
+                .failWith(new IllegalStateException("message-of-unknown-origin"));
+
+        run(X);
+
+        RangeRow july = range(X, "202607");
+        assertThat(july.status()).isEqualTo("실패");
+        assertThat(july.reason()).isEqualTo("RAW_SAVE_FAILED: IllegalStateException");
+        assertThat(monthState("202607")).isEqualTo(julyBefore);
+        assertThat(output).doesNotContain("message-of-unknown-origin");
+        assertNextRangesContinued("202607");
+    }
+
     // ---- US3-7, SC-005 ----
 
     @ParameterizedTest(name = "succeeds={0}")
