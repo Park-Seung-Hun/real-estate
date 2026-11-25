@@ -25,6 +25,8 @@ import org.springframework.test.context.TestPropertySource;
         // HouseholdLock이 풀에서 연결을 하나 더 쓰므로 요청 10건이 잠금을 기다려도 풀이 마르지 않게 한다
         "spring.datasource.hikari.maximum-pool-size=20",
         // MockMvc 요청은 https://localhost로 가므로 요청 출처 검사의 허용 출처도 같게 둔다
-        "estate.web.allowed-origins=https://localhost"})
+        "estate.web.allowed-origins=https://localhost",
+        // 테스트에서는 예약이 돌지 않는다. 수집 테스트는 실행 메서드를 직접 부른다
+        "estate.collector.cron=-"})
 public @interface IntegrationTest {
 }

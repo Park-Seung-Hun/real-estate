@@ -34,3 +34,19 @@ estate:
     allowed-issuers:
       - https://accounts.google.com
       - accounts.google.com
+  collector:
+    # 쉼표로 여러 지역(시군구 코드 5자리). 비우면 수집하지 않는다
+    regions: ${ESTATE_COLLECTOR_REGIONS:}
+    service-key: ${DATA_GO_KR_SERVICE_KEY:}
+    cron: ${ESTATE_COLLECTOR_CRON:0 0 9 * * *}
+    base-url: https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev
+    daily-call-limit: 10000
+    self-stop-margin: 500
+    connect-timeout: 5s
+    read-timeout: 30s
+    raw:
+      endpoint: ${ESTATE_RAW_S3_ENDPOINT:}
+      region: ${ESTATE_RAW_S3_REGION:}
+      bucket: ${ESTATE_RAW_S3_BUCKET:}
+      access-key: ${ESTATE_RAW_S3_ACCESS_KEY:}
+      secret-key: ${ESTATE_RAW_S3_SECRET_KEY:}

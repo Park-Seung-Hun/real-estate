@@ -17,5 +17,16 @@ services:
     ports:
       - "127.0.0.1:9090:8080"
 
+  # 원본 응답 파일과 사진을 담는 S3 호환 저장소. 로컬 전용이다.
+  # 처음 한 번 scripts/garage-init.sh를 실행해 버킷과 키를 만든다.
+  garage:
+    image: dxflrs/garage:v2.5.0
+    ports:
+      - "127.0.0.1:3900:3900"
+    volumes:
+      - ./compose/garage.toml:/etc/garage.toml:ro
+      - garage-data:/var/lib/garage
+
 volumes:
   postgres-data:
+  garage-data:
