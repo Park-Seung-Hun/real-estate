@@ -22,6 +22,8 @@ final class CollectionPlanner {
     /**
      * 매일 수집의 범위. 행이 있는 지역의 재수집 기간 달(오래된 달부터)을 모두 둔 뒤 그 밖의 실패한 범위를 둔다. 순서가 뒤바뀌면
      * 호출 한도에 걸린 날 재수집 기간의 달이 밀린다(FR-004).
+     *
+     * @param failedRanges 설정한 지역의 실패한 범위만. 뺀 지역은 읽을 때 거른다(FR-020)
      */
     static List<Range> dailyRanges(List<String> regions, RunSnapshot snapshot, Collection<Range> failedRanges) {
         Set<String> collected = regionsWithRows(snapshot);
@@ -33,7 +35,7 @@ final class CollectionPlanner {
                 }
             }
         }
-        failedRanges.stream().filter(range -> regions.contains(range.lawdCd())).forEach(ranges::add);
+        ranges.addAll(failedRanges);
         return new ArrayList<>(ranges);
     }
 

@@ -23,12 +23,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -52,6 +55,7 @@ import estate.trade.raw.RawObjectKey;
  * 값은 모두 가짜다.
  */
 @CollectorIntegrationTest
+@ExtendWith(OutputCaptureExtension.class)
 class FailureIsolationTest {
 
     static final String X = LAWD_CD;
@@ -283,7 +287,7 @@ class FailureIsolationTest {
 
     @Test
     @DisplayName("US3-5: 원본 저장이 실패하면 비교하지 않고 실패, 저장된 앞 페이지 파일은 남음")
-    void rawSaveFailureSkipsComparison() {
+    void rawSaveFailureSkipsComparison(CapturedOutput output) {
         loadYesterday();
         List<String> julyBefore = monthState("202607");
         assertThat(julyBefore).anyMatch(l -> l.contains(" trade "));
@@ -307,6 +311,8 @@ class FailureIsolationTest {
         assertThat(july.status()).isEqualTo("실패");
         assertThat(july.fetchedAt()).isEqualTo(DAY0);
         assertThat(july.reason()).startsWith("RAW_SAVE_FAILED");
+        // 실패 사유는 예외 클래스 이름뿐이라 원인(저장소 어댑터의 메시지)은 로그로 남긴다
+        assertThat(output).contains("injected failure");
         assertThat(monthState("202607")).isEqualTo(julyBefore);
         assertThat(raw.saved().stream().filter(s -> s.key().equals(key1)).toList())
                 .singleElement().satisfies(s -> assertThat(s.body()).isEqualTo(page1));

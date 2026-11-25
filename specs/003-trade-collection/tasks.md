@@ -146,8 +146,8 @@
 
 **Independent Test**: 지역 하나로 적재와 매일 수집을 돌린 뒤 설정을 바꿔 예약 실행을 호출하고, 수집 대상과 남은 자료와 이력을 확인합니다.
 
-- [ ] T042 [P] [US4] 지역 설정 변경 테스트 `src/test/java/estate/trade/collect/RegionChangeTest.java`: spec US4-1(지역 `99998` 추가는 매일 수집 뒤 범위 확장, 그 지역 이력 0건), US4-2(지역 `99999`를 빼면 그 지역의 재수집 기간 달과 실패한 범위 요청 0회, 단지와 거래와 이력과 `fetch_range` 행 수 그대로), US4-3(빼고 시계를 3개월 옮긴 뒤 다시 넣으면 재수집 기간 안의 행 없는 달이 기준 적재로 반영되어 그 달 이력 0건, 행이 있는 달도 `fetched_at`이 7일보다 오래되어 기준 적재로 반영되어 그 달 이력 0건, spec US2 경우 21). 설정 변경은 실행 메서드 `run(List<String> regions)`에 넘기는 지역 목록을 바꾸는 것으로 나타낸다(같은 데이터베이스 상태를 이어서 씀, research R3). US4-3은 뺀 동안 신고된 거래를 행이 없는 달과 행이 있는 달 양쪽의 가짜 서버 응답에 넣어, 그 거래가 어느 달에서도 `신규`로 기록되지 않음을 본다(그 거래 행은 생김). FR-020. US4-4는 T007에서 검증한다
-- [ ] T043 [US4] T042가 드러낸 부족한 곳을 `src/main/java/estate/trade/collect/CollectionPlanner.java`에서 채운다. T042 통과
+- [X] T042 [P] [US4] 지역 설정 변경 테스트 `src/test/java/estate/trade/collect/RegionChangeTest.java`: spec US4-1(지역 `99998` 추가는 매일 수집 뒤 범위 확장, 그 지역 이력 0건), US4-2(지역 `99999`를 빼면 그 지역의 재수집 기간 달과 실패한 범위 요청 0회, 단지와 거래와 이력과 `fetch_range` 행 수 그대로), US4-3(빼고 시계를 3개월 옮긴 뒤 다시 넣으면 재수집 기간 안의 행 없는 달이 기준 적재로 반영되어 그 달 이력 0건, 행이 있는 달도 `fetched_at`이 7일보다 오래되어 기준 적재로 반영되어 그 달 이력 0건, spec US2 경우 21). 설정 변경은 실행 메서드 `run(List<String> regions)`에 넘기는 지역 목록을 바꾸는 것으로 나타낸다(같은 데이터베이스 상태를 이어서 씀, research R3). US4-3은 뺀 동안 신고된 거래를 행이 없는 달과 행이 있는 달 양쪽의 가짜 서버 응답에 넣어, 그 거래가 어느 달에서도 `신규`로 기록되지 않음을 본다(그 거래 행은 생김). FR-020. US4-4는 T007에서 검증한다
+- [X] T043 [US4] T042가 드러낸 부족한 곳을 `src/main/java/estate/trade/collect/CollectionPlanner.java`에서 채운다. T042 통과
 
 **Checkpoint**: 모든 사용자 스토리가 통과합니다.
 
@@ -155,11 +155,11 @@
 
 ## Phase 7: Polish
 
-- [ ] T044 재생 테스트 `src/test/java/estate/trade/replay/TradeReplayTest.java`(research R11): `ESTATE_REPLAY_DIR`가 없으면 건너뜀. 날짜 폴더를 차례로 읽어 가짜 서버가 그 날의 달 파일을 반환하게 하고(파일이 없는 달은 연결 끊김), 시계를 그 날 09:00(한국 시간)으로 옮겨 예약 실행 메서드를 호출. 지역 코드는 파일이나 폴더에서 읽지 않고 `ESTATE_REPLAY_LAWD_CD`로 받는다. 날짜와 계약월마다 변경 종류별 이력 건수를 `ESTATE_REPLAY_OUT`에 쓴다(저장소 밖). 이 파일에 실제 값을 넣지 않는다
-- [ ] T045 quickstart "2. 데이터 확인 기간 재생"을 실행한다: 데이터 확인 스크립트로 비교 보고서를 11-10까지 다시 만들고, T044를 실제 원본으로 돌려, quickstart의 정의 차이 표로 설명되지 않는 차이가 0건인지 대조한다. 결과와 대조 기록은 `.private/`에만 둔다. 설명되지 않는 차이가 있으면 원인을 적고 저장소 소유자에게 알린다
-- [ ] T046 [P] 비활성으로 둔 테스트를 확인한다: `src/test/java/estate/`에서 `@Disabled` 중 이 기능의 작업 번호가 적힌 것이 남지 않았는지(T044의 환경 변수 조건 건너뜀은 제외)
-- [ ] T047 전체 테스트를 통과시킨다: `./gradlew test --rerun`. 결과 집계는 `build/test-results/test/*.xml`로 센다
-- [ ] T048 커밋 전 점검: `git add` 뒤 `python3 -I <원래 체크아웃>/.private/tools/precommit_check.py <저장소>`, 그리고 저장소 소유자의 `.env`에 있는 실제 지역 코드와 인증키 값이 스테이징된 파일과 커밋 메시지에 없는지 `git grep`으로 확인한다(값은 출력하지 않는다). 43자 이상의 긴 테스트 메서드 이름이 키로 오인되면 이름을 줄이거나 근거를 적는다
+- [X] T044 재생 테스트 `src/test/java/estate/trade/replay/TradeReplayTest.java`(research R11): `ESTATE_REPLAY_DIR`가 없으면 건너뜀. 날짜 폴더를 차례로 읽어 가짜 서버가 그 날의 달 파일을 반환하게 하고(파일이 없는 달은 연결 끊김), 시계를 그 날 09:00(한국 시간)으로 옮겨 예약 실행 메서드를 호출. 지역 코드는 파일이나 폴더에서 읽지 않고 `ESTATE_REPLAY_LAWD_CD`로 받는다. 날짜와 계약월마다 변경 종류별 이력 건수를 `ESTATE_REPLAY_OUT`에 쓴다(저장소 밖). 이 파일에 실제 값을 넣지 않는다
+- [X] T045 quickstart "2. 데이터 확인 기간 재생"을 실행한다: 데이터 확인 스크립트로 비교 보고서를 11-10까지 다시 만들고, T044를 실제 원본으로 돌려, quickstart의 정의 차이 표로 설명되지 않는 차이가 0건인지 대조한다. 결과와 대조 기록은 `.private/`에만 둔다. 설명되지 않는 차이가 있으면 원인을 적고 저장소 소유자에게 알린다
+- [X] T046 [P] 비활성으로 둔 테스트를 확인한다: `src/test/java/estate/`에서 `@Disabled` 중 이 기능의 작업 번호가 적힌 것이 남지 않았는지(T044의 환경 변수 조건 건너뜀은 제외)
+- [X] T047 전체 테스트를 통과시킨다: `./gradlew test --rerun`. 결과 집계는 `build/test-results/test/*.xml`로 센다
+- [X] T048 커밋 전 점검: `git add` 뒤 `python3 -I <원래 체크아웃>/.private/tools/precommit_check.py <저장소>`, 그리고 저장소 소유자의 `.env`에 있는 실제 지역 코드와 인증키 값이 스테이징된 파일과 커밋 메시지에 없는지 `git grep`으로 확인한다(값은 출력하지 않는다). 43자 이상의 긴 테스트 메서드 이름이 키로 오인되면 이름을 줄이거나 근거를 적는다
 - [ ] T049 quickstart "3. 실제 API로 한 번 실행"을 저장소 소유자와 함께 한다(실제 인증키, 본인의 관심 지역 코드, 하루 호출 한도 확인). 결과(실행 종류, 범위 수, 호출 수, 원본 파일 수, 인증키가 로그에 없음)를 진행 원장에 적는다. 다음 날 매일 수집 결과도 확인한다
 - [ ] T050 기능 브랜치 전체를 spec, plan, tasks, `docs/review-criteria.md`와 대조하는 최종 리뷰를 한다
 - [ ] T051 `docs/backlog.md`의 003 상태를 완료로 바꾼다(`develop/v1` 머지 직전 커밋, 저장소 소유자 허락 필요)
